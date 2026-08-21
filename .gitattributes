@@ -1,0 +1,17 @@
+# Normalise text files to LF both in the repository and in the working tree, on every platform. Being explicit
+# here overrides whatever core.autocrlf a contributor happens to have set, which is the point: line endings
+# should be a property of the project, not of whoever cloned it.
+* text=auto eol=lf
+
+# The Gradle wrapper script is run by /bin/sh. A CRLF copy fails with "bad interpreter", so it is pinned
+# to LF no matter what a contributor's core.autocrlf setting is. Its Windows counterpart needs CRLF.
+gradlew         text eol=lf
+gradlew.bat     text eol=crlf
+
+# The wrapper jar is binary and must never be line-ending converted.
+*.jar           binary
+*.png           binary
+*.jpg           binary
+*.pdf           binary
+*.ttf           binary
+*.otf           binary

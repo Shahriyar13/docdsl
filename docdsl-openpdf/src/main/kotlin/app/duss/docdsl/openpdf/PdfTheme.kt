@@ -8,6 +8,7 @@ import org.openpdf.text.Element
 import org.openpdf.text.Font
 import org.openpdf.text.PageSize
 import org.openpdf.text.Rectangle
+import org.openpdf.text.pdf.BaseFont
 import java.awt.Color
 
 /**
@@ -18,6 +19,10 @@ import java.awt.Color
  * value you pass rather than a hundred literals spread through the generators.
  */
 public data class PdfTheme(
+    /**
+     * The typeface everything is drawn in. The default needs no font file, but it can only draw Latin-1 —
+     * see [PdfFontFamily.embedded] for text in any other script.
+     */
     public val fontFamily: PdfFontFamily = PdfFontFamily.Helvetica,
     /** Used by any run that does not name a size. Most of these documents live at 8pt. */
     public val defaultSizePoints: Float = TextStyle.SMALL,
@@ -30,21 +35,6 @@ public data class PdfTheme(
     /** A [app.duss.docdsl.ColumnWidth.Flexible] column never shrinks below this. */
     public val minFlexibleColumnPoints: Float = 90f,
 )
-
-/**
- * The typefaces every PDF reader has, named.
- *
- * openpdf identifies a family with a bare `Int`, which is fine internally and poor in a published API — an
- * `Int` parameter tells a caller nothing and accepts anything. These are the standard PDF families, which need
- * no font file shipped or embedded.
- */
-public enum class PdfFontFamily(internal val openPdfFamily: Int) {
-    Helvetica(Font.HELVETICA),
-    Times(Font.TIMES_ROMAN),
-    Courier(Font.COURIER),
-    Symbol(Font.SYMBOL),
-    ZapfDingbats(Font.ZAPFDINGBATS),
-}
 
 /** Paper and margins, in points. */
 public data class PageGeometry(
@@ -87,12 +77,51 @@ internal fun Emphasis.toFontStyle(): Int = when (this) {
  * This is the only place a style becomes a font, which is what makes measurement and drawing agree — a column
  * measured in one font and drawn in another is how text ends up wrapping when the arithmetic said it fits.
  */
-internal fun PdfTheme.fontFor(style: TextStyle?): Font = Font(
-    fontFamily.openPdfFamily,
-    style?.sizePoints ?: defaultSizePoints,
-    (style?.emphasis ?: Emphasis.Normal).toFontStyle(),
-    (style?.color ?: defaultColor).toAwt(),
-)
+internal fun PdfTheme.fontFor(style: TextStyle?): Font {
+    val emphasis = style?.emphasis ?: Emphasis.Normal
+    val size = style?.sizePoints ?: defaultSizePoints
+    val color = (style?.color ?: defaultColor).toAwt()
+
+    // A standard family has no face of its own; openpdf resolves the Int and the style together.
+    val face = fontFamily.faceFor(emphasis)
+        ?: return Font(fontFamily.standardFamily ?: Font.HELVETICA, size, emphasis.toFontStyle(), color)
+
+    // Synthesise only the emphasis the chosen face does not already carry. A real bold face asked for bold
+    // needs nothing added — stroking a synthetic bold over a genuine one prints heavier than the designer
+    // drew. But a family holding regular and bold, asked for bold-italic, gets the bold face and still needs
+    // the italic skew, and asking for BOLDITALIC there would double the weight it already has.
+    val synthetic = syntheticStyle(requested = emphasis, supplied = fontFamily.suppliedEmphasisFor(emphasis))
+    return Font(face, size, synthetic, color)
+}
+
+private val Emphasis.isBold: Boolean get() = this == Emphasis.Bold || this == Emphasis.BoldItalic
+private val Emphasis.isItalic: Boolean get() = this == Emphasis.Italic || this == Emphasis.BoldItalic
+
+/** What openpdf still has to fake, given what the face already provides. */
+private fun syntheticStyle(requested: Emphasis, supplied: Emphasis): Int {
+    val needsBold = requested.isBold && !supplied.isBold
+    val needsItalic = requested.isItalic && !supplied.isItalic
+    return when {
+        needsBold && needsItalic -> Font.BOLDITALIC
+        needsBold -> Font.BOLD
+        needsItalic -> Font.ITALIC
+        else -> Font.NORMAL
+    }
+}
+
+/**
+ * The font openpdf quietly substitutes for a standard family when it meets a character it cannot draw.
+ *
+ * Loaded once, lazily, and only if something actually needs measuring in it. It ships inside the openpdf jar,
+ * so this resolves through the classloader rather than the filesystem.
+ */
+private val fallbackBaseFont: BaseFont? by lazy {
+    runCatching {
+        BaseFont.createFont(OPENPDF_FALLBACK_FONT, BaseFont.IDENTITY_H, BaseFont.EMBEDDED)
+    }.getOrNull()
+}
+
+private const val OPENPDF_FALLBACK_FONT: String = "font-fallback/LiberationSans-Regular.ttf"
 
 /**
  * How wide this text really is, in points, in the font it will be drawn in.
@@ -106,8 +135,28 @@ internal fun PdfTheme.fontFor(style: TextStyle?): Font = Font(
  */
 internal fun Font.widthOf(text: String): Float {
     if (text.isEmpty()) return 0f
-    val base = runCatching { getCalculatedBaseFont(false) }.getOrNull()
-        ?: return text.length * calculatedSize * 0.5f
     val size = calculatedSize.takeIf { it > 0f } ?: TextStyle.SMALL
-    return text.split('\n').maxOf { line -> base.getWidthPoint(line, size) }
+    return text.split('\n').maxOf { line -> widthOfLine(line, size) }
+}
+
+/**
+ * One line, measured in the font openpdf will really draw it in.
+ *
+ * The subtlety that makes this more than a one-liner: a standard family has no `BaseFont` of its own, and when
+ * openpdf meets a character above U+00FF in such a chunk it silently swaps in a bundled Liberation Sans rather
+ * than failing. Measuring that line in Helvetica returns **zero** — Helvetica's metrics simply have no entry
+ * for the glyph — so an [app.duss.docdsl.ColumnWidth.Auto] column holding Cyrillic or Greek would be sized to
+ * nothing but the slack and then drawn at full width, spilling over its neighbours. Mirroring openpdf's own
+ * substitution rule here is what keeps the measured font and the drawn font the same font, which is the entire
+ * premise of measuring at all.
+ *
+ * A zero from any other cause — a glyph missing from an embedded subset, a font that will not report metrics —
+ * falls back to a rough estimate. Being approximately right beats confidently collapsing a column.
+ */
+private fun Font.widthOfLine(line: String, size: Float): Float {
+    if (line.isEmpty()) return 0f
+    val substituted = baseFont == null && line.any { it.code > 0xFF }
+    val base = if (substituted) fallbackBaseFont else runCatching { getCalculatedBaseFont(false) }.getOrNull()
+    val measured = base?.let { runCatching { it.getWidthPoint(line, size) }.getOrNull() } ?: 0f
+    return if (measured > 0f) measured else line.length * size * 0.5f
 }

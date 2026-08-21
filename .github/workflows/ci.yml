@@ -1,0 +1,45 @@
+name: build
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+# The wrapper distribution and the dependency cache are the only writes; nothing here needs more.
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The build declares no Java toolchain on purpose, so it compiles on whatever JDK runs Gradle and
+      # emits JVM 17 bytecode via kotlin jvmTarget plus JavaCompile options.release. That makes the JDK
+      # chosen here the compiler JDK, and it only has to satisfy Gradle and Kotlin rather than match the
+      # target. 21 is the newest LTS that Gradle 9.2 and Kotlin 2.3 both support without qualification;
+      # a newer JDK would work too, but there is nothing to gain from it and a support gap to risk.
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # `build` compiles both modules and runs the tests.
+      - name: Build and test
+        run: ./gradlew build --stacktrace
+
+      # Without this the only evidence of a test failure is the console tail, which truncates the useful part.
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: '**/build/reports/tests/'
+          retention-days: 7

@@ -90,9 +90,19 @@ public open class BlockScope internal constructor() {
         )
     }
 
-    /** A paragraph of several differently-styled runs — a bold lead-in followed by normal detail. */
-    public fun paragraph(align: Align = Align.Start, build: TextScope.() -> Unit) {
-        val scope = TextScope()
+    /**
+     * A paragraph of several differently-styled runs — a bold lead-in followed by normal detail.
+     *
+     * [size] and [color] set what the runs inside start from, exactly as they do on the single-string
+     * overload; a run that names its own wins.
+     */
+    public fun paragraph(
+        size: Float? = null,
+        color: DocColor? = null,
+        align: Align = Align.Start,
+        build: TextScope.() -> Unit,
+    ) {
+        val scope = TextScope(size, color)
         scope.build()
         val runs = scope.runs()
         if (runs.isEmpty()) return
@@ -251,7 +261,18 @@ public class DocumentScope internal constructor() : BlockScope() {
 
 /** Builds a sequence of styled runs. */
 @DocDsl
-public class TextScope internal constructor() {
+public class TextScope internal constructor(
+    /**
+     * The size and colour every run here starts from, set by whoever opened the scope.
+     *
+     * Without these a block of runs could not be sized at all: `cell("8pt text", size = SMALL)` states the
+     * size once, but the moment a cell needs two differently-emphasised runs and becomes `cell { }`, there
+     * would be nowhere left to say it — every run would silently fall back to the theme default, which is how
+     * one table ends up two points larger than its neighbours. A run that names its own size still wins.
+     */
+    private val defaultSize: Float? = null,
+    private val defaultColor: DocColor? = null,
+) {
 
     private val collected: MutableList<Run> = mutableListOf()
 
@@ -265,12 +286,15 @@ public class TextScope internal constructor() {
         color: DocColor? = null,
     ) {
         if (value.isNullOrEmpty()) return
-        collected += TextRun(value, textStyle(bold, italic, size, color))
+        collected += TextRun(value, textStyle(bold, italic, size ?: defaultSize, color ?: defaultColor))
     }
 
     /** The page this ends up on. Resolved by the renderer. */
     public fun currentPage(bold: Boolean = false, size: Float? = null, color: DocColor? = null) {
-        collected += TokenRun(DocToken.CurrentPage, textStyle(bold, italic = false, size = size, color = color))
+        collected += TokenRun(
+            DocToken.CurrentPage,
+            textStyle(bold, italic = false, size = size ?: defaultSize, color = color ?: defaultColor),
+        )
     }
 
     /**
@@ -280,7 +304,10 @@ public class TextScope internal constructor() {
      * closes. Stating it here means the document does not have to care.
      */
     public fun totalPages(bold: Boolean = false, size: Float? = null, color: DocColor? = null) {
-        collected += TokenRun(DocToken.TotalPages, textStyle(bold, italic = false, size = size, color = color))
+        collected += TokenRun(
+            DocToken.TotalPages,
+            textStyle(bold, italic = false, size = size ?: defaultSize, color = color ?: defaultColor),
+        )
     }
 }
 
@@ -361,13 +388,15 @@ public class RowScope internal constructor() {
 
     /** A cell of several runs, styled independently — a bold name above its normal-weight description. */
     public fun cell(
+        size: Float? = null,
+        color: DocColor? = null,
         align: Align? = null,
         vAlign: VAlign? = null,
         borders: Borders? = null,
         padding: Padding? = null,
         build: TextScope.() -> Unit,
     ) {
-        val scope = TextScope()
+        val scope = TextScope(size, color)
         scope.build()
         collected += Cell(
             content = listOf(Block.Paragraph(scope.runs(), align ?: Align.Start)),
@@ -426,8 +455,15 @@ public class TotalsScope internal constructor() {
 
     internal fun lines(): List<Line> = collected.toList()
 
+    /**
+     * One label-and-amount row, or nothing at all when there is no amount.
+     *
+     * Empty counts as absent as well as null, which matters because an absent figure usually arrives here
+     * having been through a formatter — and a formatter given nothing returns `""`, not null. Treating only
+     * null as absent would put a row with a blank amount on the document.
+     */
     public fun line(label: String, amount: String?, emphasised: Boolean = false) {
-        if (amount == null) return
+        if (amount.isNullOrEmpty()) return
         collected += Line(label, amount, emphasised)
     }
 }
@@ -459,8 +495,8 @@ public class ListScope internal constructor() {
         collected += ListEntry.Item(listOf(TextRun(text)))
     }
 
-    public fun item(build: TextScope.() -> Unit) {
-        val scope = TextScope()
+    public fun item(size: Float? = null, color: DocColor? = null, build: TextScope.() -> Unit) {
+        val scope = TextScope(size, color)
         scope.build()
         collected += ListEntry.Item(scope.runs())
     }

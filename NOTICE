@@ -1,0 +1,47 @@
+docdsl
+Copyright 2026 Shahriyar Aghajani
+
+This product is licensed under the Apache License, Version 2.0. A copy of the
+licence is distributed with this product in the file LICENSE, and is also
+available at http://www.apache.org/licenses/LICENSE-2.0
+
+------------------------------------------------------------------------------
+Third-party dependencies
+------------------------------------------------------------------------------
+
+docdsl-core
+  Depends only on the Kotlin standard library
+  (org.jetbrains.kotlin:kotlin-stdlib), by JetBrains s.r.o., which is licensed
+  under the Apache License, Version 2.0 — the same licence as docdsl. No other
+  third-party dependency.
+
+docdsl-openpdf
+  Depends on OpenPDF (com.github.librepdf:openpdf).
+
+  OpenPDF is licensed under the terms of either the Mozilla Public License
+  Version 2.0 or the GNU Lesser General Public License Version 2.1 or later,
+  at the recipient's option (SPDX: "MPL-2.0 OR LGPL-2.1+"). docdsl exercises
+  the MPL-2.0 option.
+
+  OpenPDF is used unmodified, as a library dependency resolved at build time.
+  No OpenPDF source code has been copied into, or derived within, docdsl.
+  Consequently no file in this product is Covered Software under the MPL, and
+  the reciprocal obligations of the MPL and LGPL attach to OpenPDF itself
+  rather than to docdsl.
+
+  Source code and the full text of both licences are available from the
+  OpenPDF project at https://github.com/LibrePDF/OpenPDF
+
+  As stated in OpenPDF's own META-INF/LICENSES.md, OpenPDF additionally
+  incorporates some code originating in Apache Software Foundation projects,
+  licensed under the Apache License, Version 2.0. As stated in its
+  META-INF/misc_licenses.txt, it also contains one class derived from a
+  JavaWorld article, used with the stated permission of its author and
+  publisher. Those notices travel with the OpenPDF artifact.
+
+------------------------------------------------------------------------------
+
+A consumer of docdsl-openpdf takes on OpenPDF's terms exactly as it would by
+depending on OpenPDF directly. A consumer of docdsl-core alone takes on no
+terms beyond the Apache License, Version 2.0, under which both docdsl and the
+Kotlin standard library are licensed.
