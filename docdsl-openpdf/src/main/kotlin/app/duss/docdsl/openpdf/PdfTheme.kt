@@ -18,8 +18,7 @@ import java.awt.Color
  * value you pass rather than a hundred literals spread through the generators.
  */
 public data class PdfTheme(
-    /** One of openpdf's family names — [Font.HELVETICA], [Font.TIMES_ROMAN], [Font.COURIER]. */
-    public val fontFamily: String = Font.HELVETICA,
+    public val fontFamily: PdfFontFamily = PdfFontFamily.Helvetica,
     /** Used by any run that does not name a size. Most of these documents live at 8pt. */
     public val defaultSizePoints: Float = TextStyle.SMALL,
     public val defaultColor: DocColor = DocColor.Black,
@@ -31,6 +30,21 @@ public data class PdfTheme(
     /** A [app.duss.docdsl.ColumnWidth.Flexible] column never shrinks below this. */
     public val minFlexibleColumnPoints: Float = 90f,
 )
+
+/**
+ * The typefaces every PDF reader has, named.
+ *
+ * openpdf identifies a family with a bare `Int`, which is fine internally and poor in a published API — an
+ * `Int` parameter tells a caller nothing and accepts anything. These are the standard PDF families, which need
+ * no font file shipped or embedded.
+ */
+public enum class PdfFontFamily(internal val openPdfFamily: Int) {
+    Helvetica(Font.HELVETICA),
+    Times(Font.TIMES_ROMAN),
+    Courier(Font.COURIER),
+    Symbol(Font.SYMBOL),
+    ZapfDingbats(Font.ZAPFDINGBATS),
+}
 
 /** Paper and margins, in points. */
 public data class PageGeometry(
@@ -74,7 +88,7 @@ internal fun Emphasis.toFontStyle(): Int = when (this) {
  * measured in one font and drawn in another is how text ends up wrapping when the arithmetic said it fits.
  */
 internal fun PdfTheme.fontFor(style: TextStyle?): Font = Font(
-    fontFamily,
+    fontFamily.openPdfFamily,
     style?.sizePoints ?: defaultSizePoints,
     (style?.emphasis ?: Emphasis.Normal).toFontStyle(),
     (style?.color ?: defaultColor).toAwt(),
