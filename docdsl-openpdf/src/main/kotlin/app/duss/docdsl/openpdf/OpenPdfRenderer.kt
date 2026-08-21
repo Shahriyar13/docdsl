@@ -67,6 +67,30 @@ public class OpenPdfRenderer(
     public fun renderToBytes(spec: DocumentSpec): ByteArray =
         ByteArrayOutputStream().also { render(spec, it) }.toByteArray()
 
+    /**
+     * Writes just the body of [spec] into a document somebody else opened.
+     *
+     * The way into an existing codebase. A generator that already owns its page setup, its running header and
+     * its footer can describe its *content* with this library and keep everything else exactly as it is —
+     * rather than having to port the page furniture on the same day, which is what would make adoption an
+     * all-or-nothing rewrite.
+     *
+     * [DocumentSpec.frame] is deliberately ignored here: the host document already has whatever header and
+     * footer it wants, and quietly adding a second set would be worse than not honouring the field. Use
+     * [render] when this library is to own the whole page.
+     *
+     * @param availableWidthPoints the width a full-width table should assume. Defaults to the theme's page
+     *   geometry, which is right when the host uses the same paper and margins — pass the host's own figure
+     *   when it does not, or tables will be measured against the wrong width.
+     */
+    public fun renderBody(
+        spec: DocumentSpec,
+        into: Document,
+        availableWidthPoints: Float = theme.page.contentWidthPoints,
+    ) {
+        spec.body.forEach { block -> into.add(block, availableWidthPoints) }
+    }
+
     // -----------------------------------------------------------------------------------------------------
     //  Blocks
     // -----------------------------------------------------------------------------------------------------
