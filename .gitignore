@@ -11,3 +11,8 @@ out/
 # OS
 .DS_Store
 Thumbs.db
+
+# Credentials. A Maven settings.xml carries the Central Portal token in plain text, and this repository is
+# public. Gradle does not read it anyway -- the token belongs in ~/.gradle/gradle.properties, outside the
+# working tree, as mavenCentralUsername / mavenCentralPassword.
+settings.xml

@@ -2,8 +2,8 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     kotlin("jvm")
-    `maven-publish`
-    signing
+    // See docdsl-core: this applies maven-publish and signing itself, so neither is listed here.
+    id("com.vanniktech.maven.publish")
 }
 
 group = providers.gradleProperty("docdslGroup").get()
@@ -22,11 +22,11 @@ kotlin {
     }
 }
 
+// Both lines stay — see docdsl-core for why removing them would publish `org.gradle.jvm.version=25` and lock
+// JDK 17 consumers out of a jar that is valid for them. The sources and javadoc jars come from the plugin.
 java {
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
-    withSourcesJar()
-    withJavadocJar()
 }
 
 tasks.withType<JavaCompile>().configureEach {
@@ -61,42 +61,39 @@ tasks.withType<Jar>().configureEach {
     }
 }
 
-publishing {
-    publications {
-        create<MavenPublication>("maven") {
-            artifactId = "docdsl-openpdf"
-            from(components["java"])
-            pom {
-                name.set("docdsl-openpdf")
-                description.set("Renders a docdsl document to PDF using openpdf.")
-                url.set(providers.gradleProperty("docdslUrl"))
-                licenses {
-                    license {
-                        name.set(providers.gradleProperty("docdslLicenceName"))
-                        url.set(providers.gradleProperty("docdslLicenceUrl"))
-                    }
-                }
-                developers {
-                    developer {
-                        id.set(providers.gradleProperty("docdslDeveloperId"))
-                        name.set(providers.gradleProperty("docdslDeveloperName"))
-                    }
-                }
-                scm {
-                    connection.set(providers.gradleProperty("docdslScmConnection"))
-                    developerConnection.set(providers.gradleProperty("docdslScmDeveloperConnection"))
-                    url.set(providers.gradleProperty("docdslUrl"))
-                }
+mavenPublishing {
+    publishToMavenCentral()
+    signAllPublications()
+
+    coordinates(
+        providers.gradleProperty("docdslGroup").get(),
+        "docdsl-openpdf",
+        providers.gradleProperty("docdslVersion").get(),
+    )
+
+    pom {
+        name.set("docdsl-openpdf")
+        description.set("Renders a docdsl document to PDF using openpdf.")
+        inceptionYear.set("2026")
+        url.set(providers.gradleProperty("docdslUrl"))
+        licenses {
+            license {
+                name.set(providers.gradleProperty("docdslLicenceName"))
+                url.set(providers.gradleProperty("docdslLicenceUrl"))
+                distribution.set(providers.gradleProperty("docdslLicenceUrl"))
             }
         }
-    }
-}
-
-signing {
-    val key = providers.gradleProperty("signingInMemoryKey").orNull
-    val keyPassword = providers.gradleProperty("signingInMemoryKeyPassword").orNull
-    if (key != null) {
-        useInMemoryPgpKeys(key, keyPassword)
-        sign(publishing.publications)
+        developers {
+            developer {
+                id.set(providers.gradleProperty("docdslDeveloperId"))
+                name.set(providers.gradleProperty("docdslDeveloperName"))
+                url.set(providers.gradleProperty("docdslUrl"))
+            }
+        }
+        scm {
+            url.set(providers.gradleProperty("docdslUrl"))
+            connection.set(providers.gradleProperty("docdslScmConnection"))
+            developerConnection.set(providers.gradleProperty("docdslScmDeveloperConnection"))
+        }
     }
 }

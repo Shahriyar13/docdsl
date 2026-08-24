@@ -1,7 +1,7 @@
 # Releasing docdsl
 
-Everything needed to publish is in the repository. What is *not* here is the Maven Central publishing plugin,
-and that is deliberate — see [Why the plugin is not wired in yet](#why-the-plugin-is-not-wired-in-yet).
+Everything needed to publish is in the repository, including the Central publishing plugin. The namespace
+`app.duss` is verified, so sections 2 and 3 below are done and kept only as a record.
 
 The facts below were checked against Sonatype's and GitHub's current documentation, not recalled. Where
 something could not be verified it says so.
@@ -119,74 +119,25 @@ but it will block the next release — set a reminder.
 
 ## Publishing
 
-### Add the plugin
+### The plugin is already wired
 
-In the root `build.gradle.kts`:
+`com.vanniktech.maven.publish` 0.37.0 is on the build: made available in the root `build.gradle.kts` with
+`apply false`, applied in each module, and configured through `mavenPublishing { }`. It applies `maven-publish`
+and `signing` itself, builds the sources and javadoc jars, writes a Central-valid POM, and — the part that
+matters for a two-module build — collects both modules into **one** deployment bundle. The Portal validates a
+bundle rather than individual files, so two separate uploads would be two half-releases.
 
-```kotlin
-plugins {
-    kotlin("jvm") version "2.3.10" apply false
-    id("com.vanniktech.maven.publish") version "0.37.0" apply false
-}
-```
+Three things in those files must not be "tidied away":
 
-Then, in **each** module, replace the existing `publishing { }` and `signing { }` blocks with:
-
-```kotlin
-plugins {
-    kotlin("jvm")
-    id("com.vanniktech.maven.publish")
-}
-
-mavenPublishing {
-    publishToMavenCentral()
-    signAllPublications()
-    coordinates(
-        providers.gradleProperty("docdslGroup").get(),
-        "docdsl-core",                                    // "docdsl-openpdf" in the other module
-        providers.gradleProperty("docdslVersion").get(),
-    )
-    pom {
-        name.set("docdsl-core")
-        description.set("...")                            // keep the existing text
-        inceptionYear.set("2026")
-        url.set(providers.gradleProperty("docdslUrl"))
-        licenses {
-            license {
-                name.set(providers.gradleProperty("docdslLicenceName"))
-                url.set(providers.gradleProperty("docdslLicenceUrl"))
-            }
-        }
-        developers {
-            developer {
-                id.set(providers.gradleProperty("docdslDeveloperId"))
-                name.set(providers.gradleProperty("docdslDeveloperName"))
-            }
-        }
-        scm {
-            url.set(providers.gradleProperty("docdslUrl"))
-            connection.set(providers.gradleProperty("docdslScmConnection"))
-            developerConnection.set(providers.gradleProperty("docdslScmDeveloperConnection"))
-        }
-    }
-}
-```
-
-Four traps, each of which produces a broken release rather than an error:
-
-1. **Delete the old `publishing { }` block.** The plugin creates a publication named `maven` from
-   `components["java"]` — exactly the name the current build uses. Leaving it gives you a name collision, or a
-   second publication whose POM has only a name and description, which Central rejects for missing
-   `url`/`licenses`/`developers`/`scm`.
-2. **Do not apply the plugin to the root project.** It has nothing publishable; at best it logs a warning, at
-   worst you ship an empty `docdsl` artifact beside the real two.
-3. **Keep `java { sourceCompatibility / targetCompatibility = VERSION_17 }`.** With no toolchain,
-   `targetCompatibility` otherwise defaults to the JDK running Gradle (24 or 25 here) while `jvmTarget` is 17.
-   Kotlin's JVM-target validation fails the build on that mismatch, and if it were silenced the artifact would
-   publish `org.gradle.jvm.version=24` — so Gradle consumers on JDK 17 would get a resolution failure even
-   though the bytecode is perfectly valid for them. The current build already sets this; do not remove it.
-4. **`sourceCompatibility`/`targetCompatibility` is not the same as `-Xjdk-release`.** Both are in the build
-   for different reasons; keep both.
+1. **`java { sourceCompatibility / targetCompatibility = VERSION_17 }`.** With no toolchain declared,
+   `targetCompatibility` otherwise follows the JDK running Gradle (25 here) while `jvmTarget` is 17. Kotlin's
+   JVM-target validation fails the build on that mismatch, and silencing it instead would publish
+   `org.gradle.jvm.version=25` — refusing JDK 17 consumers a jar whose bytecode is perfectly valid for them.
+2. **No `withSourcesJar()` / `withJavadocJar()`.** The plugin builds both; asking twice risks a
+   duplicate-artifact failure.
+3. **The artifactId equals the Gradle project name.** `coordinates()` rewrites the publication's artifactId
+   but not `project.name`, and the POM entry generated for `project(":docdsl-core")` comes from that name. It
+   is also what EasyProject's `includeBuild` substitution matches on.
 
 ### Release
 
@@ -212,19 +163,6 @@ read the file list, and confirm both modules are present with their `.jar`, `-so
 Only then press **Publish**. Sonatype's own words: "Once released/published, you will not be able to
 remove/update/modify your components." A `VALIDATED` or `FAILED` deployment can be dropped and the version
 reused; a `PUBLISHED` one cannot. A wrong 0.1.0 is wrong forever.
-
-## Why the plugin is not wired in yet
-
-Adding it now would mean deleting the two `publishing { }` blocks that currently work, in favour of a
-third-party plugin DSL that cannot be verified on this machine — Gradle's CLI cannot start here, so the first
-real test would be someone else's build.
-
-That risk buys nothing, because publishing is blocked on the account, DNS and GPG steps above regardless, and
-those take longer than the edit does. Meanwhile the current configuration is not idle: EasyProject consumes
-this library through `includeBuild`, so a broken build file here breaks that build too.
-
-So the sequence is: finish the one-time setup, then make the plugin change as its own commit, sync it in
-IntelliJ, and publish. The config above is complete — it is a paste, not a design exercise.
 
 ## Verifying without Gradle
 
