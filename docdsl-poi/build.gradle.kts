@@ -51,8 +51,9 @@ tasks.test {
     useJUnitPlatform()
 }
 
-// See docdsl-core. It matters more here: this is the artifact that carries the OpenPDF dependency, so this is
-// the NOTICE a consumer actually needs to read.
+// See docdsl-core. It matters here for the same reason it does in the openpdf module: this is the artifact
+// that carries a third-party renderer, so this is the NOTICE a consumer actually needs to read — POI's own
+// terms, and the one BSD-licensed dependency (curvesapi) POI resolves transitively.
 tasks.withType<Jar>().configureEach {
     metaInf {
         from(rootDir.resolve("LICENSE"))
