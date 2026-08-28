@@ -22,7 +22,11 @@ val spec = document {
 }
 
 OpenPdfRenderer().render(spec, File("invoice.pdf").outputStream())
+ExcelRenderer().render(spec, File("invoice.xlsx").outputStream())
 ```
+
+The second line is the whole argument for describing a document rather than drawing one. Nothing above it
+knows which of the two it was written for.
 
 ## Why it exists
 
@@ -57,13 +61,15 @@ this column must not wrap, that one is prose and should — moves the arithmetic
 
 ```kotlin
 dependencies {
-    implementation("app.duss.docdsl:docdsl-openpdf:0.1.0")
+    implementation("app.duss.docdsl:docdsl-openpdf:0.1.0")   // PDF
+    implementation("app.duss.docdsl:docdsl-poi:0.1.0")       // .xlsx
 }
 ```
 
-That pulls in `docdsl-core` and OpenPDF transitively. Depend on `app.duss.docdsl:docdsl-core:0.1.0` alone if
-you only want to build and pass around document descriptions — to unit-test the shape of a document, say —
-without a PDF library on the classpath.
+Either one pulls in `docdsl-core` transitively along with its own renderer's library, and taking both brings
+in both. Depend on `app.duss.docdsl:docdsl-core:0.1.0` alone if you only want to build and pass around
+document descriptions — to unit-test the shape of a document, say — without a rendering library on the
+classpath at all.
 
 **0.1.0 is early.** The API is still moving; while the version is below 1.0.0 a minor bump may change or
 remove public declarations. Pin an exact version rather than a range.
@@ -235,19 +241,47 @@ page size and margins, as above — pass the wrong width and tables are measured
 
 ## Modules
 
-| Module           | Contents                                   | Dependencies                    |
-| ---------------- | ------------------------------------------ | ------------------------------- |
-| `docdsl-core`    | The document model and the builder DSL     | The Kotlin standard library only |
-| `docdsl-openpdf` | Renders a `DocumentSpec` to PDF            | `docdsl-core`, OpenPDF          |
+| Module           | Contents                                        | Dependencies                     |
+| ---------------- | ----------------------------------------------- | -------------------------------- |
+| `docdsl-core`    | The document model and the builder DSL          | The Kotlin standard library only |
+| `docdsl-openpdf` | Renders a `DocumentSpec` to PDF                 | `docdsl-core`, OpenPDF           |
+| `docdsl-poi`     | Renders a `DocumentSpec` to an .xlsx workbook   | `docdsl-core`, Apache POI        |
 
-The split is not ceremony. Keeping the model free of any renderer is what allows a spreadsheet or HTML renderer
-to consume the same descriptions later, and it keeps `docdsl-core`'s licensing free of any renderer's terms.
+The split is not ceremony, and `docdsl-poi` is the evidence: it was added without one line of the document
+model changing and without a single document being told which medium it would be rendered to. Keeping the
+model free of any renderer is also what keeps `docdsl-core`'s licensing free of any renderer's terms.
+
+### Rendering the same document twice
+
+```kotlin
+val spec = document { /* … */ }
+
+OpenPdfRenderer().render(spec, pdfOut)
+ExcelRenderer().render(spec, xlsxOut, sheetName = "Proforma Invoice")
+```
+
+Both renderers lay the document out in points using the same `TableLayout`, so column proportions, alignment,
+borders, shading and emphasis carry across. The spreadsheet reconciles a page's free-form layout with a
+sheet's single column grid by making its physical columns the **union of every x position any table edge lands
+on**, and merging each logical cell across the ones it covers — which is what lets a 45/55 information grid
+and a five-column item table share one grid and both keep their real proportions.
+
+Four things a spreadsheet cannot reproduce, and does not pretend to:
+
+- **Row heights are estimated.** Excel will not auto-fit a row containing a merged cell, and nearly every row
+  here has one.
+- **Pagination is Excel's.** `pageBreak()` becomes a print break; where the other pages fall is the print
+  setup's decision.
+- **A cell holding a nested table** becomes a region of sheet cells with a box drawn around it, rather than
+  one cell containing a table.
+- **Cell padding.** A sheet has none — only an indent — so padding survives as row height rather than as
+  space inside the cell.
 
 ## Limitations
 
 - **No colspan or rowspan**, by design. Spans are how a table model acquires most of its complexity, and the
   documents this was built for do not need them: a cell that wants to look merged holds a nested table.
-- **Only PDF renders today.** The module layout anticipates others; none exists yet.
+- **PDF and .xlsx render today.** HTML is the obvious next sibling; none exists yet.
 - **Text outside Latin-1 needs an embedded font.** See above. The default font cannot draw it.
 - **The API is not stable below 1.0.0.**
 
@@ -260,4 +294,6 @@ docdsl is licensed under the [Apache License 2.0](LICENSE).
 [OpenPDF](https://github.com/LibrePDF/OpenPDF), which is licensed `MPL-2.0 OR LGPL-2.1+`; docdsl exercises the
 MPL-2.0 option and uses OpenPDF unmodified, so no file in this project is Covered Software under the MPL. A
 consumer of `docdsl-openpdf` takes on OpenPDF's terms exactly as it would by depending on OpenPDF directly.
+`docdsl-poi` depends on [Apache POI](https://poi.apache.org), which is Apache-2.0 — the same licence as this
+library, so it adds nothing to a consumer's licence audit.
 See [NOTICE](NOTICE) for the full attribution.
