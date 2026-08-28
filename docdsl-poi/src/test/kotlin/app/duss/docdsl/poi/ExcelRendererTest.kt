@@ -11,6 +11,7 @@ import org.apache.poi.ss.usermodel.WorkbookFactory
 import org.apache.poi.ss.util.CellRangeAddress
 import org.apache.poi.xssf.usermodel.XSSFSheet
 import java.io.ByteArrayInputStream
+import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -200,6 +201,50 @@ class ExcelRendererTest {
         assertTrue(!sheet.isDisplayGridlines, "gridlines hide the document's own borders")
         assertTrue(sheet.fitToPage, "a document should print one page wide")
         assertEquals(1, sheet.printSetup.fitWidth.toInt())
+    }
+
+    /**
+     * A horizontal bar chart, which is the shape that decided whether a report could render to a sheet.
+     *
+     * A bar needs no primitive of its own: it is a weighted layout table whose first cell has a background
+     * and no text. What has to survive is the proportion — a 25% bar that comes out half the width is a
+     * different chart — so this checks the filled cell really is about a quarter of the pair.
+     */
+    @Test
+    fun `a weighted filled cell is a bar`() {
+        val sheet = render(
+            document {
+                table(TableStyle.Layout) {
+                    column(width = ColumnWidth.Weight(30f), align = Align.Start)
+                    column(width = ColumnWidth.Weight(70f))
+                    row {
+                        cell("Steel", align = Align.Start)
+                        cellOf {
+                            table(TableStyle.Layout) {
+                                column(width = ColumnWidth.Weight(0.25f))
+                                column(width = ColumnWidth.Weight(0.75f))
+                                row {
+                                    cellOf(background = DocColor.Red, minHeightPoints = 12f) {}
+                                    cellOf {}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        )
+        // Asserted on the grid itself rather than on merges: a span covering a single physical column needs
+        // no merge, so counting merges would be counting the wrong thing.
+        //
+        // The label takes 30% of the width, so the chart starts there; the bar is a quarter of the remaining
+        // 70%, so it ends at 30 + 17.5 = 47.5%. Both have to be real column boundaries or the bar is not
+        // where the description put it.
+        val widths = sheet.columnPoints()
+        val total = widths.sum()
+        val boundaries = widths.runningFold(0.0) { at, width -> at + width }.map { it / total }
+
+        assertTrue(boundaries.any { abs(it - 0.30) < 0.03 }, "no boundary where the label ends: $boundaries")
+        assertTrue(boundaries.any { abs(it - 0.475) < 0.03 }, "no boundary where the bar ends: $boundaries")
     }
 
     @Test
