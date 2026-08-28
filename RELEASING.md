@@ -6,6 +6,16 @@ Everything needed to publish is in the repository, including the Central publish
 The facts below were checked against Sonatype's and GitHub's current documentation, not recalled. Where
 something could not be verified it says so.
 
+## Where 0.2.0 stands
+
+**0.2.0 is not published.** It adds `docdsl-poi`, and because that module does not exist in 0.1.0, EasyProject
+currently has `includeBuild("../docdsl")` back in its `settings.gradle.kts` — so that build needs this
+checkout on disk beside it. Publishing 0.2.0 is what lets that line come out again; the coordinates in
+`build.gradle.kts` are identical either way and need no edit.
+
+Until then, a CI box or a fresh clone of EasyProject without this repo beside it will not resolve
+`app.duss.docdsl:docdsl-poi`.
+
 ## Which route, and why
 
 **Maven Central, through the Central Portal at central.sonatype.com.** Two things make it the right answer for
@@ -13,7 +23,7 @@ this library rather than merely the conventional one:
 
 - You control `duss.app`, so the namespace `app.duss` can be verified by DNS and the artifacts keep the
   coordinates they already have. **Nothing in EasyProject has to change** — the composite build and the
-  published artifact resolve `app.duss.docdsl:docdsl-openpdf:0.1.0` identically.
+  published artifact resolve `app.duss.docdsl:docdsl-openpdf:0.2.0` identically.
 - Anyone can consume it anonymously.
 
 The alternatives were investigated and rejected:
@@ -124,8 +134,8 @@ but it will block the next release — set a reminder.
 `com.vanniktech.maven.publish` 0.37.0 is on the build: made available in the root `build.gradle.kts` with
 `apply false`, applied in each module, and configured through `mavenPublishing { }`. It applies `maven-publish`
 and `signing` itself, builds the sources and javadoc jars, writes a Central-valid POM, and — the part that
-matters for a two-module build — collects both modules into **one** deployment bundle. The Portal validates a
-bundle rather than individual files, so two separate uploads would be two half-releases.
+matters for a multi-module build — collects every module into **one** deployment bundle. The Portal validates a
+bundle rather than individual files, so separate uploads would be as many half-releases.
 
 Three things in those files must not be "tidied away":
 
@@ -141,28 +151,30 @@ Three things in those files must not be "tidied away":
 
 ### Release
 
-Bump `docdslVersion` in `gradle.properties`, commit, tag `v0.1.0`, then from the **root**, once:
+Bump `docdslVersion` in `gradle.properties`, commit, tag the version (`v0.2.0` for this one), then from the
+**root**, once:
 
 ```bash
 ./gradlew publishToMavenCentral
 ```
 
-**Run it exactly once, unqualified.** Both modules must land in one deployment bundle — the Portal validates a
-bundle, not individual files, and the plugin assembles it in a build-scoped shared service's end-of-build hook.
-Invoking `:docdsl-core:publish...` and then `:docdsl-openpdf:publish...` fires that hook twice and produces two
-independent deployments, which is how a release ends up half-published.
+**Run it exactly once, unqualified.** All THREE modules must land in one deployment bundle — the Portal
+validates a bundle, not individual files, and the plugin assembles it in a build-scoped shared service’s
+end-of-build hook. Invoking `:docdsl-core:publish...` and then `:docdsl-openpdf:publish...` fires that hook
+twice and produces two independent deployments, which is how a release ends up half-published.
 
 Gradle cannot run from the CLI on this machine, so drive it from IntelliJ's Gradle panel or from CI.
 
 ### Verify, then publish
 
 The deployment lands in the Portal in `VALIDATED` state. **Check it before releasing it:** open the deployment,
-read the file list, and confirm both modules are present with their `.jar`, `-sources.jar`, `-javadoc.jar`,
-`.pom`, `.module`, and an `.asc` for each.
+read the file list, and confirm all three modules are present with their `.jar`, `-sources.jar`,
+`-javadoc.jar`, `.pom`, `.module`, and an `.asc` for each. That is 60 files for a three-module release, where
+0.1.0 was 40 for two.
 
 Only then press **Publish**. Sonatype's own words: "Once released/published, you will not be able to
 remove/update/modify your components." A `VALIDATED` or `FAILED` deployment can be dropped and the version
-reused; a `PUBLISHED` one cannot. A wrong 0.1.0 is wrong forever.
+reused; a `PUBLISHED` one cannot. A wrong version is wrong forever.
 
 ## Verifying without Gradle
 
@@ -177,5 +189,11 @@ java -cp "<kotlin-compiler-embeddable>;<kotlin-stdlib>;<kotlin-reflect>;<kotlinx
 ```
 
 All five jars are already in the Gradle module cache. Paths must be Windows-style, `;`-separated. Compile
-`docdsl-core` first, then `docdsl-openpdf` with `openpdf-3.0.0.jar` and `out/core` on its classpath. Test
-sources need `-Xexplicit-api=disable`, since Gradle's `explicitApi()` does not apply to test compilations.
+`docdsl-core` first, then each renderer against `out/core` plus its own library — `openpdf-3.0.0.jar` for
+`docdsl-openpdf`, `poi-ooxml` and its transitive jars for `docdsl-poi`. Test sources need
+`-Xexplicit-api=disable`, since Gradle's `explicitApi()` does not apply to test compilations.
+
+The spreadsheet renderer's tests are worth running rather than just compiling, and they can be: they assert on
+a workbook read back rather than on appearance, so a plain runner that reflects over the `@Test` methods and
+catches `AssertionError` is enough when JUnit's platform launcher is not on hand. Two real defects — a span one
+column short, and a chart whose proportions did not survive — were caught that way rather than by inspection.

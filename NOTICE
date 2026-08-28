@@ -39,9 +39,48 @@ docdsl-openpdf
   JavaWorld article, used with the stated permission of its author and
   publisher. Those notices travel with the OpenPDF artifact.
 
+docdsl-poi
+  Depends on Apache POI (org.apache.poi:poi-ooxml).
+
+  Apache POI is a project of the Apache Software Foundation, licensed under
+  the Apache License, Version 2.0 — the same licence as docdsl. It is used
+  unmodified, as a library dependency resolved at build time. No POI source
+  code has been copied into, or derived within, docdsl.
+
+  POI is available from https://poi.apache.org, and its own NOTICE travels
+  with the artifact.
+
+  POI resolves further dependencies of its own. All of them are licensed under
+  the Apache License, Version 2.0 — poi, poi-ooxml-lite, XMLBeans, Commons
+  Compress, Commons IO, Commons Collections, Commons Codec, Commons Math,
+  SparseBitSet and Log4j API — with one exception:
+
+    curvesapi (com.github.virtuald:curvesapi), by Virtual Design Software,
+    is licensed under the BSD 3-Clause License. It is used unmodified and
+    reaches a consumer transitively through poi-ooxml. Its licence is
+    permissive and imposes no reciprocal obligation; it requires that its
+    copyright notice, this list of conditions and its disclaimer be retained
+    in redistributions, which the unmodified artifact carries in its own jar.
+    Source and the full licence text are at
+    https://github.com/virtuald/curvesapi
+
+  POI declares several further dependencies as *optional* — XMLSec, Bouncy
+  Castle, PDFBox and Batik among them — for signing and image conversion.
+  Optional dependencies are not resolved for a consumer, and docdsl uses none
+  of the features that need them, so they do not reach a consumer of
+  docdsl-poi and their terms are not engaged.
+
 ------------------------------------------------------------------------------
 
 A consumer of docdsl-openpdf takes on OpenPDF's terms exactly as it would by
-depending on OpenPDF directly. A consumer of docdsl-core alone takes on no
-terms beyond the Apache License, Version 2.0, under which both docdsl and the
-Kotlin standard library are licensed.
+depending on OpenPDF directly. A consumer of docdsl-poi likewise takes on
+Apache POI's terms, and curvesapi's, exactly as it would by depending on POI
+directly — both permissive, and neither reciprocal. A consumer of docdsl-core
+alone takes on no terms beyond the Apache License, Version 2.0, under which
+both docdsl and the Kotlin standard library are licensed.
+
+The two renderer modules are independent of each other. Taking docdsl-poi
+alone brings in no PDF library, and therefore none of OpenPDF's MPL/LGPL
+terms; taking docdsl-openpdf alone brings in no spreadsheet library. That
+separation is the practical reason the renderers are separate artifacts
+rather than one.

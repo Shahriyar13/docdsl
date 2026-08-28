@@ -61,17 +61,17 @@ this column must not wrap, that one is prose and should — moves the arithmetic
 
 ```kotlin
 dependencies {
-    implementation("app.duss.docdsl:docdsl-openpdf:0.1.0")   // PDF
-    implementation("app.duss.docdsl:docdsl-poi:0.1.0")       // .xlsx
+    implementation("app.duss.docdsl:docdsl-openpdf:0.2.0")   // PDF
+    implementation("app.duss.docdsl:docdsl-poi:0.2.0")       // .xlsx
 }
 ```
 
 Either one pulls in `docdsl-core` transitively along with its own renderer's library, and taking both brings
-in both. Depend on `app.duss.docdsl:docdsl-core:0.1.0` alone if you only want to build and pass around
+in both. Depend on `app.duss.docdsl:docdsl-core:0.2.0` alone if you only want to build and pass around
 document descriptions — to unit-test the shape of a document, say — without a rendering library on the
 classpath at all.
 
-**0.1.0 is early.** The API is still moving; while the version is below 1.0.0 a minor bump may change or
+**0.2.0 is still early.** The API is moving; while the version is below 1.0.0 a minor bump may change or
 remove public declarations. Pin an exact version rather than a range.
 
 While developing against a local checkout, a composite build avoids publishing anything at all. In the
