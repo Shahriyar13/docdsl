@@ -1,0 +1,90 @@
+name: release
+
+# Two ways in, on purpose.
+#
+# A tag push is the normal path: `git push origin v0.3.0` publishes the release for it. But the tags for
+# 0.1.0, 0.2.0 and 0.2.1 were pushed before this workflow existed, and a `push` trigger cannot reach into the
+# past — so `workflow_dispatch` takes a tag name and does the same job for one that is already there.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release, e.g. v0.2.1'
+        required: true
+        type: string
+
+# The only elevated permission in this repository. `gh release create` writes to the Releases API, which
+# `contents: read` — what ci.yml uses — cannot do.
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Work out which tag
+        id: tag
+        run: echo "name=${{ inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
+
+      # The tag itself, not the branch: the notes are read from the CHANGELOG as it stood at that version, so
+      # re-running this for an old tag produces what that release actually said rather than what master says
+      # now.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.tag.outputs.name }}
+          fetch-depth: 0
+
+      # One source of truth. The CHANGELOG is written for the repository; a release body maintained beside it
+      # would be a second copy, and the two would differ within one release.
+      - name: Extract the notes for this version
+        id: notes
+        run: |
+          VERSION="${TAG#v}"
+          # index() rather than a regex. A version is full of dots and sits inside square brackets, and
+          # getting `^## \[0.2.1\]` through the shell into awk intact is a losing game: awk reads `\[` as a
+          # plain `[`, which turns the whole thing into a character class that matches a single digit and
+          # never the heading. Exact prefix matching has no escaping to get wrong.
+          awk -v v="$VERSION" '
+            index($0, "## [" v "]") == 1 { found = 1; next }
+            found && index($0, "## [") == 1 { exit }
+            found { print }
+          ' CHANGELOG.md > body.md
+
+          if [ ! -s body.md ]; then
+            echo "::error::No '## [$VERSION]' section in CHANGELOG.md — nothing to release."
+            exit 1
+          fi
+
+          PREVIOUS=$(git tag -l 'v*' --sort=-v:refname | grep -A1 -x "$TAG" | tail -1)
+          {
+            echo
+            echo '## Install'
+            echo
+            echo '```kotlin'
+            echo "implementation(\"app.duss.docdsl:docdsl-openpdf:$VERSION\")   // PDF"
+            echo "implementation(\"app.duss.docdsl:docdsl-poi:$VERSION\")       // .xlsx"
+            echo '```'
+            echo
+            # Absent for the very first tag, where `grep -A1` finds nothing after it and returns the tag
+            # itself — comparing a tag with itself is an empty diff, so it is left out rather than printed.
+            if [ -n "$PREVIOUS" ] && [ "$PREVIOUS" != "$TAG" ]; then
+              echo "**Full changelog:** https://github.com/${{ github.repository }}/compare/$PREVIOUS...$TAG"
+            fi
+          } >> body.md
+        env:
+          TAG: ${{ steps.tag.outputs.name }}
+
+      - name: Create the release
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists — updating its notes rather than failing."
+            gh release edit "$TAG" --notes-file body.md
+          else
+            gh release create "$TAG" --title "$TAG" --notes-file body.md --verify-tag
+          fi
+        env:
+          TAG: ${{ steps.tag.outputs.name }}
+          GH_TOKEN: ${{ github.token }}
