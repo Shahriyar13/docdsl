@@ -30,10 +30,32 @@ public data class PdfTheme(
     public val page: PageGeometry = PageGeometry(),
     /** The grid weight a table uses when its style asks for borders. */
     public val defaultBorderWidth: Float = 0.5f,
-    /** Extra width allowed on top of measured text, so a column sized to its glyphs does not wrap. */
-    public val autoColumnSlackPoints: Float = 6f,
-    /** A [app.duss.docdsl.ColumnWidth.Flexible] column never shrinks below this. */
+    /**
+     * Extra width allowed on top of measured text, so a column sized to its glyphs does not wrap.
+     *
+     * It is also the only breathing room a narrow column gets. A row-number column measures the width of "9"
+     * and nothing else, so at 6pt of slack the digits sat against the grid lines; 12 gives them a margin
+     * without widening a column that has real content in it, because the slack is a constant rather than a
+     * proportion.
+     */
+    public val autoColumnSlackPoints: Float = 12f,
+    /**
+     * A [app.duss.docdsl.ColumnWidth.Flexible] column's *preferred* minimum.
+     *
+     * Preferred, not absolute: when the table cannot afford it, a flexible column gives way down to
+     * [hardMinColumnPoints] rather than letting a measured [app.duss.docdsl.ColumnWidth.Auto] column be
+     * squeezed below what its content needs. Prose can wrap; a price cannot.
+     */
     public val minFlexibleColumnPoints: Float = 90f,
+    /** No column is ever narrower than this, whatever the arithmetic says. */
+    public val hardMinColumnPoints: Float = 24f,
+    /**
+     * Line height, as a multiple of the font size.
+     *
+     * OpenPDF's own default is 1.5, which is generous for a form and turns a long item list into pages of
+     * white. 1.15 is the spacing these documents were drawn at before they were described.
+     */
+    public val lineSpacing: Float = 1.15f,
 )
 
 /** Paper and margins, in points. */

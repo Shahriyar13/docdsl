@@ -336,8 +336,22 @@ public class TableScope internal constructor() {
         align: Align = Align.Center,
         width: ColumnWidth = ColumnWidth.Auto,
         hideWhenEmpty: Boolean = false,
+        /**
+         * Where the heading sits, which is centred unless said otherwise.
+         *
+         * A price column's figures are right-aligned so their decimals line up, and its heading centred over
+         * them reads as a label rather than as the first value. Prose is the exception: a description
+         * column's heading belongs at the left edge with the text under it.
+         */
+        headerAlign: Align? = null,
     ) {
-        declaredColumns += Column(title, align, width, hideWhenEmpty)
+        declaredColumns += Column(
+            title = title,
+            align = align,
+            width = width,
+            headerAlign = headerAlign,
+            hideWhenEmpty = hideWhenEmpty,
+        )
     }
 
     /** One row. Add cells in column order; a short row is padded by the renderer. */

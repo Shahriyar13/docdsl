@@ -121,7 +121,7 @@ public class OpenPdfRenderer(
                     block.blocks.forEach { add(it, availableWidth) }
                 }
             }
-            is Block.Spacer -> add(Paragraph(Chunk("\n")).also { it.spacingAfter = block.points })
+            is Block.Spacer -> add(spacerOf(block.points))
             Block.PageBreak -> newPage()
         }
     }
@@ -143,16 +143,33 @@ public class OpenPdfRenderer(
                 availableWidth,
             )
         }
-        is Block.Spacer -> Paragraph(Chunk("\n")).also { it.spacingAfter = block.points }
+        is Block.Spacer -> spacerOf(block.points)
         Block.PageBreak -> Paragraph(Chunk.NEXTPAGE)
     }
 
     internal fun paragraphOf(block: Block.Paragraph, resolveTokens: TokenResolver?): Paragraph {
         val paragraph = Paragraph()
         paragraph.alignment = block.align.toElementAlignment()
+        // Multiplied rather than fixed, so a 14pt title and an 8pt item line each get spacing proportional to
+        // themselves. OpenPDF's own default is 1.5, which reads as generously spaced prose in a document that
+        // is mostly dense tabular fact — see PdfTheme.lineSpacing.
+        paragraph.setLeading(0f, theme.lineSpacing)
         block.runs.forEach { run -> paragraph.add(chunkOf(run, resolveTokens)) }
         return paragraph
     }
+
+    /**
+     * Blank vertical space, and exactly as much as was asked for.
+     *
+     * This used to be a paragraph containing a newline, which costs a whole line of leading *plus* the
+     * spacing — so `spacer(10f)` opened a gap of about 25pt. The line is still needed, because OpenPDF drops
+     * a paragraph with nothing in it, but its leading is zero, so the gap is the spacing and nothing else.
+     */
+    private fun spacerOf(points: Float): Paragraph =
+        Paragraph(Chunk(" ", theme.fontFor(null))).also {
+            it.setLeading(0f, 0f)
+            it.spacingAfter = points
+        }
 
     /**
      * One run as a chunk.
@@ -168,8 +185,26 @@ public class OpenPdfRenderer(
         }
     }
 
+    /**
+     * A list, with room reserved for the widest marker it will actually print.
+     *
+     * `indentPoints` is the space OpenPDF leaves for the symbol, and a fixed 15pt is enough for "9." and not
+     * for "10." — at which point the number runs into the first word and the list reads `10Order
+     * Confirmation`. The width is measured from the real count in the font it will be drawn in, so a
+     * nine-item list stays tight and a hundred-item one still lines up.
+     *
+     * Only the items count: a nested list is not numbered by its parent, so it must not widen the gutter for
+     * the entries that are.
+     */
     private fun bulletsOf(block: Block.Bullets): org.openpdf.text.List {
-        val list = org.openpdf.text.List(block.numbered, block.indentPoints)
+        val indent = if (!block.numbered) {
+            block.indentPoints
+        } else {
+            val widest = "${block.entries.count { it is ListEntry.Item }}. "
+            maxOf(block.indentPoints, theme.fontFor(null).widthOf(widest) + SYMBOL_GAP_POINTS)
+        }
+
+        val list = org.openpdf.text.List(block.numbered, indent)
         block.entries.forEach { entry ->
             when (entry) {
                 is ListEntry.Item -> {
@@ -222,6 +257,7 @@ public class OpenPdfRenderer(
             measurer = measurer,
             slackPoints = theme.autoColumnSlackPoints,
             minFlexiblePoints = theme.minFlexibleColumnPoints,
+            hardMinPoints = theme.hardMinColumnPoints,
         )
 
         val table = PdfPTable(visible.size)
@@ -258,7 +294,7 @@ public class OpenPdfRenderer(
 
     private fun headerCell(column: Column, style: TableStyle): PdfPCell {
         val cell = PdfPCell(Phrase(column.title.orEmpty(), theme.fontFor(null)))
-        cell.horizontalAlignment = column.align.toElementAlignment()
+        cell.horizontalAlignment = column.headerAlignOrDefault.toElementAlignment()
         cell.verticalAlignment = Element.ALIGN_MIDDLE
         style.headerBackground?.let { cell.backgroundColor = it.toAwt() }
         applyBorders(cell, style.cellBorders)
@@ -308,6 +344,11 @@ public class OpenPdfRenderer(
         padding.bottom?.let { cell.paddingBottom = it }
         padding.start?.let { cell.paddingLeft = it }
         padding.end?.let { cell.paddingRight = it }
+    }
+
+    private companion object {
+        /** Clear space between a list's marker and its text, so "10." never touches the first word. */
+        const val SYMBOL_GAP_POINTS = 4f
     }
 }
 

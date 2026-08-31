@@ -50,7 +50,7 @@ pageFooter {
 
 **Table columns can be sized by measurement rather than by guess.** A column declared `ColumnWidth.Auto` is
 measured against the glyphs it will actually be drawn in, using the font metrics of the very font the renderer
-will use, and is then given that much room plus a small slack (`PdfTheme.autoColumnSlackPoints`, 6pt by
+will use, and is then given that much room plus a small slack (`PdfTheme.autoColumnSlackPoints`, 12pt by
 default) so the glyphs are not flush against the border. The code this replaced estimated width as
 `text.length * 1.5`, which ignores the font: at 8pt Helvetica a digit is about 4.45pt and a space about 2.2pt,
 so the same character count can differ twofold in real width. That is how a long description ends up crowding
@@ -61,17 +61,17 @@ this column must not wrap, that one is prose and should — moves the arithmetic
 
 ```kotlin
 dependencies {
-    implementation("app.duss.docdsl:docdsl-openpdf:0.2.0")   // PDF
-    implementation("app.duss.docdsl:docdsl-poi:0.2.0")       // .xlsx
+    implementation("app.duss.docdsl:docdsl-openpdf:0.2.1")   // PDF
+    implementation("app.duss.docdsl:docdsl-poi:0.2.1")       // .xlsx
 }
 ```
 
 Either one pulls in `docdsl-core` transitively along with its own renderer's library, and taking both brings
-in both. Depend on `app.duss.docdsl:docdsl-core:0.2.0` alone if you only want to build and pass around
+in both. Depend on `app.duss.docdsl:docdsl-core:0.2.1` alone if you only want to build and pass around
 document descriptions — to unit-test the shape of a document, say — without a rendering library on the
 classpath at all.
 
-**0.2.0 is still early.** The API is moving; while the version is below 1.0.0 a minor bump may change or
+**0.2.1 is still early.** The API is moving; while the version is below 1.0.0 a minor bump may change or
 remove public declarations. Pin an exact version rather than a range.
 
 While developing against a local checkout, a composite build avoids publishing anything at all. In the
@@ -150,7 +150,11 @@ breaks: get them out of step and OpenPDF rejects the whole table rather than the
 | `ColumnWidth.Weight`   | A fixed share of the table                                    | Layouts about geometry rather than content — a 45/55 information grid, a 50/50 pane split |
 
 Weighted columns are resolved first, `Auto` columns are then measured, and `Flexible` columns divide whatever
-remains — never shrinking below `PdfTheme.minFlexibleColumnPoints`.
+remains. `PdfTheme.minFlexibleColumnPoints` is what a flexible column gets when the table can afford it —
+a preference, not a claim: when the columns want more than the table has, **prose gives way before figures
+do**, down to `hardMinColumnPoints`, and a measured column is only squeezed once there is nothing left to
+give. A description that wraps is a nuisance; a price broken after the thousands separator reads as two
+numbers.
 
 ## Beyond tables
 

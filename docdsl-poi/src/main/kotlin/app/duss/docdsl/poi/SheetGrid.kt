@@ -259,7 +259,7 @@ internal class SheetLayout(
                     left = edges[position],
                     right = edges[position + 1],
                     runs = listOf(TextRun(indexed.column.title.orEmpty())),
-                    align = indexed.column.align,
+                    align = indexed.column.headerAlignOrDefault,
                     vAlign = VAlign.Middle,
                     borders = block.style.cellBorders,
                     background = block.style.headerBackground,

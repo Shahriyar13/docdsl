@@ -6,15 +6,23 @@ Everything needed to publish is in the repository, including the Central publish
 The facts below were checked against Sonatype's and GitHub's current documentation, not recalled. Where
 something could not be verified it says so.
 
-## Where 0.2.0 stands
+## Where 0.2.1 stands
 
-**0.2.0 is not published.** It adds `docdsl-poi`, and because that module does not exist in 0.1.0, EasyProject
-currently has `includeBuild("../docdsl")` back in its `settings.gradle.kts` — so that build needs this
-checkout on disk beside it. Publishing 0.2.0 is what lets that line come out again; the coordinates in
-`build.gradle.kts` are identical either way and need no edit.
+**0.2.0 is published; 0.2.1 is not.** 0.2.1 is the visual pass — cell padding, line spacing, spacer height,
+auto-column slack, header alignment, list markers, and the overflow rule that stopped a price column being
+squeezed until it wrapped.
 
-Until then, a CI box or a fresh clone of EasyProject without this repo beside it will not resolve
-`app.duss.docdsl:docdsl-poi`.
+**None of it reaches EasyProject until 0.2.1 is on Central.** That build resolves `0.2.x` from Maven Central
+and has no `includeBuild`, so it compiles and runs happily against 0.2.0 and produces PDFs with none of the
+fixes in them. A green build there says nothing about whether the fixes are live.
+
+Two ways to see them:
+
+- **Publish 0.2.1** (below), then bump the two coordinates in EasyProject's `build.gradle.kts`. This is the
+  one that ends with a CI box able to build it.
+- **Temporarily** add `includeBuild("../docdsl")` to EasyProject's `settings.gradle.kts` to render against
+  this checkout. Faster for a look; remember to take it out, or the build stops working for anyone without
+  this repo on disk.
 
 ## Which route, and why
 
@@ -23,7 +31,7 @@ this library rather than merely the conventional one:
 
 - You control `duss.app`, so the namespace `app.duss` can be verified by DNS and the artifacts keep the
   coordinates they already have. **Nothing in EasyProject has to change** — the composite build and the
-  published artifact resolve `app.duss.docdsl:docdsl-openpdf:0.2.0` identically.
+  published artifact resolve `app.duss.docdsl:docdsl-openpdf:0.2.1` identically.
 - Anyone can consume it anonymously.
 
 The alternatives were investigated and rejected:

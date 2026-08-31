@@ -195,6 +195,12 @@ public data class Column(
     public val align: Align = Align.Center,
     public val width: ColumnWidth = ColumnWidth.Auto,
     /**
+     * How the header sits over the column, when it should not sit the way [headerAlignOrDefault] would put it.
+     *
+     * Null almost always. See [headerAlignOrDefault] for the rule it overrides.
+     */
+    public val headerAlign: Align? = null,
+    /**
      * Drop this column entirely — its header, its width and every one of its cells — when no row has anything
      * in it.
      *
@@ -204,7 +210,22 @@ public data class Column(
      * a table breaks.
      */
     public val hideWhenEmpty: Boolean = false,
-)
+) {
+    /**
+     * Where this column's heading goes: **centred over the column, unless the column is prose.**
+     *
+     * A heading is a label for a column, not the first value in it, so centring it is what makes it read as
+     * one — over quantities, over prices whose figures are hard right so their decimals line up, over row
+     * numbers. Prose is the exception and the only one: a description column's heading belongs at the left
+     * edge with the text it describes, and a centred "Item Description" floating over a paragraph looks like
+     * a title that has come adrift.
+     *
+     * Derived rather than defaulted so the rule lives in one place instead of at every table that has ever
+     * declared a column. [headerAlign] overrides it where a document really does want something else.
+     */
+    public val headerAlignOrDefault: Align
+        get() = headerAlign ?: if (align == Align.Start) Align.Start else Align.Center
+}
 
 /**
  * How wide a column should be.
@@ -318,8 +339,15 @@ public data class TableStyle(
     public val repeatHeader: Boolean = true,
     /** Try not to split this table across a page boundary. */
     public val keepTogether: Boolean = false,
-    /** Applies to every cell that does not override it. */
-    public val cellPadding: Padding = Padding(top = 0f, bottom = 8f),
+    /**
+     * Applies to every cell that does not override it.
+     *
+     * Small on purpose. This was 8pt at the bottom of every cell, which is invisible on a five-row table and
+     * costs six pages on a five-hundred-row one — a proforma invoice grew by half its length before anyone
+     * looked at the two side by side. 2pt is what a PDF cell has by default and what these documents were
+     * drawn with.
+     */
+    public val cellPadding: Padding = Padding(top = 2f, bottom = 2f, start = 2f, end = 2f),
     public val cellVAlign: VAlign = VAlign.Middle,
 ) {
     public companion object {

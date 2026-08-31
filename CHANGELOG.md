@@ -6,6 +6,38 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-08-31
+
+The first release driven by looking at the output. Nine documents had been converted, compiled, and covered by
+structural tests; none had been put beside the PDF it replaced. A proforma invoice that was 31 pages came out
+at 46, and every cause was in this library rather than in any document.
+
+### Fixed
+
+- **`TableStyle.cellPadding` defaulted to 8pt at the bottom of every cell.** Invisible on a five-row table and
+  six pages on a five-hundred-row one. Now 2pt all round, which is what a PDF cell has by default.
+- **Paragraph leading was OpenPDF's 1.5×**, which reads as generously spaced prose in a document that is
+  mostly dense tabular fact. `PdfTheme.lineSpacing`, 1.15 by default.
+- **A spacer cost a whole line of leading plus its spacing**, so `spacer(10f)` opened about 25pt. Its line now
+  has zero leading, so the gap is the spacing and nothing else.
+- **`autoColumnSlackPoints` 6 → 12.** The slack is the only breathing room a column measuring the width of
+  "9" ever gets, and at 6pt the digits sat on the grid lines.
+- **A numbered list reserved a fixed 15pt for its marker** — enough for "9." and not for "10.", so a ten-item
+  list printed `10Order Confirmation`. The gutter is measured from the real item count in the font it will be
+  drawn in.
+- **A measured column could be squeezed until it wrapped.** When the columns wanted more than the table had, a
+  `Flexible` column insisted on `minFlexibleColumnPoints` and everything was then scaled down together —
+  including an `Auto` price column, which broke `84.024,59 EUR` after the number. Prose gives way first now,
+  down to the new `PdfTheme.hardMinColumnPoints`, and a measured column is only touched once there is nothing
+  left to give.
+
+### Added
+
+- **`Column.headerAlign`**, with `headerAlignOrDefault` deriving the rule: a heading is centred over its
+  column **unless the column is prose**, in which case it aligns with the text it describes. Previously a
+  heading took its column's alignment, so a price column's heading sat hard right and read as the first value
+  rather than as a label. Derived rather than defaulted, so no existing table declaration changed.
+
 ## [0.2.0] — 2026-08-28
 
 A second renderer, and the first evidence that the module split was worth having: **not one line of
@@ -72,6 +104,7 @@ remove public declarations. Pin an exact version.
   PDF families, or an embedded TrueType/OpenType font via `PdfFontFamily.embedded`, which is what any script
   outside Latin-1 requires.
 
-[Unreleased]: https://github.com/Shahriyar13/docdsl/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/Shahriyar13/docdsl/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/Shahriyar13/docdsl/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Shahriyar13/docdsl/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Shahriyar13/docdsl/releases/tag/v0.1.0

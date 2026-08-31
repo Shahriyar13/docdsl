@@ -51,12 +51,15 @@ public object TableLayout {
      * [ColumnWidth.Weight] column takes its stated share first, for layouts that are about geometry rather
      * than content.
      *
-     * When the fixed demands exceed the table — very long codes, a narrow table — flexible columns fall to
-     * their floor and the auto columns are scaled down together rather than one of them being starved.
+     * **When the demands exceed the table, prose gives way before figures do.** A flexible column drops below
+     * its preferred minimum, as far as [hardMinPoints], before any measured column is touched — because a
+     * description that wraps onto another line is still readable and `84.024,59 EUR` broken after the number
+     * is not. Only when the flexible columns have nothing left to give is everything scaled down together.
      *
      * @param slackPoints extra width allowed on top of measured text, so a column sized to its glyphs does
      *   not wrap on the last character.
-     * @param minFlexiblePoints a flexible column never shrinks below this.
+     * @param minFlexiblePoints what a flexible column gets when the table can afford it.
+     * @param hardMinPoints what no column goes below, whatever the arithmetic says.
      */
     public fun columnWidths(
         visible: List<VisibleColumn>,
@@ -65,6 +68,7 @@ public object TableLayout {
         measurer: TextMeasurer,
         slackPoints: Float,
         minFlexiblePoints: Float,
+        hardMinPoints: Float = 24f,
     ): FloatArray {
         val widths = FloatArray(visible.size)
         if (visible.isEmpty()) return widths
@@ -93,11 +97,18 @@ public object TableLayout {
 
         val flexible = visible.indices.filter { visible[it].column.width == ColumnWidth.Flexible }
         if (flexible.isNotEmpty()) {
-            val each = (remaining / flexible.size).coerceAtLeast(minFlexiblePoints)
+            val share = remaining / flexible.size
+            // The preferred minimum is a preference, not a claim. Insisting on it when the table cannot
+            // afford it does not create room — it creates an overflow, which then comes off every column
+            // including the measured ones, and a price column narrower than its price wraps after the
+            // thousands separator. Prose gives way instead, down to the floor.
+            val each = if (share >= minFlexiblePoints) share else share.coerceAtLeast(hardMinPoints)
             flexible.forEach { widths[it] = each }
-        } else if (remaining < 0f) {
-            // Nothing flexible to absorb the overflow, so shrink everything proportionally instead of letting
-            // the renderer silently overrun the margin.
+        }
+
+        // Only reachable when the measured columns alone will not fit: shrink everything proportionally
+        // rather than letting the renderer silently overrun the margin.
+        if (widths.sum() > tableWidth) {
             val total = widths.sum()
             if (total > 0f) {
                 val scale = tableWidth / total
