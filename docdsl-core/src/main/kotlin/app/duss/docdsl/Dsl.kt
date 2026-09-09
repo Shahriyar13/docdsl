@@ -344,12 +344,23 @@ public class TableScope internal constructor() {
          * column's heading belongs at the left edge with the text under it.
          */
         headerAlign: Align? = null,
+        /**
+         * How this one heading is drawn, when it should differ from the rest of the header row.
+         *
+         * Usually null and set once for the whole table on `TableStyle.headerStyle`; this is for the column
+         * that has to depart from it, such as a long title over a narrow column.
+         */
+        headerStyle: TextStyle? = null,
+        /** Padding inside this one heading, overriding the table's. */
+        headerPadding: Padding? = null,
     ) {
         declaredColumns += Column(
             title = title,
             align = align,
             width = width,
             headerAlign = headerAlign,
+            headerStyle = headerStyle,
+            headerPadding = headerPadding,
             hideWhenEmpty = hideWhenEmpty,
         )
     }

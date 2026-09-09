@@ -69,6 +69,14 @@ public object TableLayout {
         slackPoints: Float,
         minFlexiblePoints: Float,
         hardMinPoints: Float = 24f,
+        /**
+         * The table's [TableStyle.headerStyle], so a heading is measured in the font it will be drawn in.
+         *
+         * A column states its own override on [Column.headerStyle] and is resolved against this one here.
+         * Null — the default — measures headings at the renderer's default size, which is what happened
+         * before headings could be styled at all.
+         */
+        tableHeaderStyle: TextStyle? = null,
     ): FloatArray {
         val widths = FloatArray(visible.size)
         if (visible.isEmpty()) return widths
@@ -87,7 +95,10 @@ public object TableLayout {
         // Auto columns take what they measure, plus a little slack so the glyphs are not flush to the border.
         visible.forEachIndexed { position, indexed ->
             if (indexed.column.width != ColumnWidth.Auto) return@forEachIndexed
-            val header = indexed.column.title?.let { measurer.widthOf(it, null) } ?: 0f
+            // Measured in the heading's own style, not the default one: a heading set a size larger than the
+            // body would otherwise be measured small and drawn wide, and wrap inside a column sized to fit it.
+            val headerStyle = indexed.column.headerStyle ?: tableHeaderStyle
+            val header = indexed.column.title?.let { measurer.widthOf(it, headerStyle) } ?: 0f
             val content = rows.maxOfOrNull { row ->
                 naturalWidth(row.cells.getOrNull(indexed.index), measurer)
             } ?: 0f

@@ -6,6 +6,35 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-09-09
+
+Two things a table could not previously say about itself.
+
+### Added
+
+- **Headings can be styled.** `TableStyle.headerStyle` sets the size, weight and colour of every heading in
+  a table, and `Column.headerStyle` overrides it for one column — the same shape as the existing
+  `headerAlign`. A heading was fixed at the renderer's default text style, so there was no way to ask for a
+  heading smaller or heavier than the body it sits over.
+
+  A styled heading is **measured** in its own font, not the default one: `TableLayout.columnWidths` takes the
+  table's header style so the arithmetic that sizes a column and the drawing that fills it agree. Sizing a
+  column at 10pt and then drawing its heading at 12pt is how a heading comes to wrap inside a column that was
+  supposed to fit it.
+- **`TableStyle.headerPadding`**, which falls back to `cellPadding` — what the header row was previously fixed
+  at. A table can now give its headings room without loosening every row as well, which on a long item table
+  is the difference between a readable header and six extra pages.
+- **`TableStyle.allowRowSplit`.** False moves a row too tall for what is left of the page onto the next page
+  whole, instead of breaking it across the boundary. Worth turning off for a row that has to be read as one
+  thing — a line item whose description, HS code and country of origin mean little three lines at a time on
+  one page and two on the next.
+
+  Defaults to true, which is what every document already does, so nothing changes without asking. It costs
+  white space, which is why it is not the default.
+
+  Ignored by the spreadsheet renderer, along with `headerPadding`: a sheet has no page boundary to split a
+  row across until it is printed, and a spreadsheet cell has no padding to set. `headerStyle` does carry over.
+
 ## [0.2.1] — 2026-08-31
 
 The first release driven by looking at the output. Nine documents had been converted, compiled, and covered by
@@ -104,7 +133,8 @@ remove public declarations. Pin an exact version.
   PDF families, or an embedded TrueType/OpenType font via `PdfFontFamily.embedded`, which is what any script
   outside Latin-1 requires.
 
-[Unreleased]: https://github.com/Shahriyar13/docdsl/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/Shahriyar13/docdsl/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/Shahriyar13/docdsl/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/Shahriyar13/docdsl/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Shahriyar13/docdsl/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Shahriyar13/docdsl/releases/tag/v0.1.0

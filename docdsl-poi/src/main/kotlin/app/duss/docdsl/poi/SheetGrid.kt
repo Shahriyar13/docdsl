@@ -223,6 +223,7 @@ internal class SheetLayout(
             measurer = measurer,
             slackPoints = theme.autoColumnSlackPoints,
             minFlexiblePoints = theme.minFlexibleColumnPoints,
+            tableHeaderStyle = block.style.headerStyle,
         )
 
         // Normalised to the table's width, exactly as openpdf's `setWidths` treats the same array: the numbers
@@ -264,7 +265,11 @@ internal class SheetLayout(
                     borders = block.style.cellBorders,
                     background = block.style.headerBackground,
                     minHeightPoints = null,
-                    defaultStyle = null,
+                    // Size, weight and colour carry over to the workbook. `headerPadding` does not, and
+                    // cannot: a spreadsheet cell has no padding to set. Nor does `allowRowSplit` — a sheet
+                    // has no page boundary to split a row across until it is printed, and Excel decides that
+                    // itself.
+                    defaultStyle = block.style.headerStyleFor(indexed.column),
                 )
             }
             current++
