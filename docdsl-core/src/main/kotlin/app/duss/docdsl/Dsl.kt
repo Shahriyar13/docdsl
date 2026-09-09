@@ -151,6 +151,16 @@ public open class BlockScope internal constructor() {
     public fun totals(
         widthFraction: Float = 1f,
         align: Align = Align.End,
+        /**
+         * The block's own table style — its padding, borders and heading treatment.
+         *
+         * Defaults to what this always produced: 4pt of padding all round and no grid. Pass one to tighten
+         * or loosen a totals block without hand-building the table it is sugar for.
+         *
+         * **[widthFraction] and [align] win over the same two fields here**, since every caller states them
+         * and they read better as named arguments than buried in a style. Everything else comes from this.
+         */
+        style: TableStyle = TableStyle(cellPadding = Padding.all(4f)),
         build: TotalsScope.() -> Unit,
     ) {
         val scope = TotalsScope()
@@ -158,10 +168,9 @@ public open class BlockScope internal constructor() {
         val lines = scope.lines()
         if (lines.isEmpty()) return
         table(
-            TableStyle(
+            style.copy(
                 widthFraction = widthFraction,
                 flowAlign = align,
-                cellPadding = Padding.all(4f),
             )
         ) {
             column(width = ColumnWidth.Flexible, align = Align.Start)
@@ -178,29 +187,51 @@ public open class BlockScope internal constructor() {
     /**
      * Places blocks side by side — a notes column beside a totals block, say.
      *
-     * A layout table: no grid, no padding, columns weighted by [weights].
+     * A layout table: by default no grid, no padding, columns weighted by [weights].
+     *
+     * @param style the table the panes sit in. [TableStyle.Layout] — invisible and unpadded — is what this
+     *   always built; pass another to give the panes padding, a grid or a shaded band. Its `cellPadding`
+     *   is what separates one pane from the next, since a pane is a cell.
+     * @param vAlign how each pane sits in its cell. Top by default, which is what makes two panes of
+     *   different heights start on the same line rather than one floating in the middle of the other.
      */
-    public fun panes(vararg weights: Float, build: PanesScope.() -> Unit) {
+    public fun panes(
+        vararg weights: Float,
+        style: TableStyle = TableStyle.Layout,
+        vAlign: VAlign = VAlign.Top,
+        build: PanesScope.() -> Unit,
+    ) {
         val scope = PanesScope()
         scope.build()
         val panes = scope.panes()
         if (panes.isEmpty()) return
-        table(TableStyle.Layout) {
+        table(style) {
             panes.forEachIndexed { index, _ ->
                 column(width = ColumnWidth.Weight(weights.getOrElse(index) { 1f }), align = Align.Start)
             }
-            row { panes.forEach { blocks -> cellOf(vAlign = VAlign.Top) { blocks.forEach(::add) } } }
+            row { panes.forEach { blocks -> cellOf(vAlign = vAlign) { blocks.forEach(::add) } } }
         }
     }
 
-    /** A titled section, dropped entirely when its body turns out empty. */
-    public fun section(heading: String, size: Float = TextStyle.MEDIUM, build: BlockScope.() -> Unit) {
+    /**
+     * A titled section, dropped entirely when its body turns out empty.
+     *
+     * @param headingStyle the heading's own style. Null keeps what this always produced — bold at [size] —
+     *   and passing one replaces it outright, which is how a heading gets a colour or a different weight.
+     */
+    public fun section(
+        heading: String,
+        size: Float = TextStyle.MEDIUM,
+        headingStyle: TextStyle? = null,
+        build: BlockScope.() -> Unit,
+    ) {
         val scope = BlockScope()
         scope.build()
         val body = scope.blocks()
         if (body.isEmpty()) return
+        val style = headingStyle ?: TextStyle(Emphasis.Bold, size)
         collected += Block.Group(
-            blocks = listOf(Block.Paragraph(listOf(TextRun(heading, TextStyle(Emphasis.Bold, size))))) + body,
+            blocks = listOf(Block.Paragraph(listOf(TextRun(heading, style)))) + body,
         )
     }
 
@@ -344,12 +375,23 @@ public class TableScope internal constructor() {
          * column's heading belongs at the left edge with the text under it.
          */
         headerAlign: Align? = null,
+        /**
+         * How this one heading is drawn, when it should differ from the rest of the header row.
+         *
+         * Usually null and set once for the whole table on `TableStyle.headerStyle`; this is for the column
+         * that has to depart from it, such as a long title over a narrow column.
+         */
+        headerStyle: TextStyle? = null,
+        /** Padding inside this one heading, overriding the table's. */
+        headerPadding: Padding? = null,
     ) {
         declaredColumns += Column(
             title = title,
             align = align,
             width = width,
             headerAlign = headerAlign,
+            headerStyle = headerStyle,
+            headerPadding = headerPadding,
             hideWhenEmpty = hideWhenEmpty,
         )
     }

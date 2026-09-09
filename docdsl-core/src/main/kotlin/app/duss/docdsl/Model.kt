@@ -201,6 +201,16 @@ public data class Column(
      */
     public val headerAlign: Align? = null,
     /**
+     * How this column's heading is drawn, when it should not look like the rest of the header row.
+     *
+     * Null almost always: the table's [TableStyle.headerStyle] covers the usual case of wanting every
+     * heading a size smaller, and this is for the one column that departs from it — a long title over a
+     * narrow column, typically. Resolved by [TableStyle.headerStyleFor].
+     */
+    public val headerStyle: TextStyle? = null,
+    /** This column's heading padding, overriding [TableStyle.headerPadding]. Resolved the same way. */
+    public val headerPadding: Padding? = null,
+    /**
      * Drop this column entirely — its header, its width and every one of its cells — when no row has anything
      * in it.
      *
@@ -340,6 +350,33 @@ public data class TableStyle(
     /** Try not to split this table across a page boundary. */
     public val keepTogether: Boolean = false,
     /**
+     * How every heading in this table is drawn. Null is the renderer's default text style, which is what the
+     * header row used to be fixed at — there was no way to ask for a smaller or heavier heading than the body.
+     *
+     * A whole [TextStyle] rather than a size alone, because a heading that wants to be smaller usually wants
+     * to be bolder too, and the type for that already exists.
+     */
+    public val headerStyle: TextStyle? = null,
+    /**
+     * Padding inside every heading cell. **Null means [cellPadding]** — which is what the header row was
+     * fixed at, so a table can now give its headings more room to breathe than its rows without loosening
+     * the rows as well.
+     */
+    public val headerPadding: Padding? = null,
+    /**
+     * Whether a row taller than the space left on the page may be **split across the boundary**.
+     *
+     * True is the renderer's own default and what these documents have always done: a tall row breaks, and
+     * its first lines finish the page. False moves such a row whole to the next page, leaving the gap.
+     *
+     * Worth turning off for a row that has to be read as one thing — a line item whose description, HS code
+     * and country of origin mean little three lines at a time on one page and two on the next. It costs
+     * white space, which is why it is not the default.
+     *
+     * Distinct from [keepTogether], which is about the whole table rather than one row of it.
+     */
+    public val allowRowSplit: Boolean = true,
+    /**
      * Applies to every cell that does not override it.
      *
      * Small on purpose. This was 8pt at the bottom of every cell, which is invisible on a five-row table and
@@ -350,6 +387,20 @@ public data class TableStyle(
     public val cellPadding: Padding = Padding(top = 2f, bottom = 2f, start = 2f, end = 2f),
     public val cellVAlign: VAlign = VAlign.Middle,
 ) {
+    /**
+     * How [column]'s heading is drawn: its own [Column.headerStyle] if it states one, otherwise the table's.
+     *
+     * Null all the way down means the renderer's default, which is what every heading was before either of
+     * these existed. **A renderer must both draw and _measure_ the heading with what this returns** — a
+     * column measured at one size and drawn at another is how a heading comes to wrap where the arithmetic
+     * said it fitted, which is why [TableLayout.columnWidths] takes the table's header style too.
+     */
+    public fun headerStyleFor(column: Column): TextStyle? = column.headerStyle ?: headerStyle
+
+    /** Padding inside [column]'s heading: the column's, else the table's, else [cellPadding]. */
+    public fun headerPaddingFor(column: Column): Padding =
+        column.headerPadding ?: headerPadding ?: cellPadding
+
     public companion object {
         /**
          * A table used purely to place things side by side: no grid, no shading, no padding.

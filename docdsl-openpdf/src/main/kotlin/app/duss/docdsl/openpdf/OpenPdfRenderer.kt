@@ -258,6 +258,7 @@ public class OpenPdfRenderer(
             slackPoints = theme.autoColumnSlackPoints,
             minFlexiblePoints = theme.minFlexibleColumnPoints,
             hardMinPoints = theme.hardMinColumnPoints,
+            tableHeaderStyle = block.style.headerStyle,
         )
 
         val table = PdfPTable(visible.size)
@@ -265,6 +266,10 @@ public class OpenPdfRenderer(
         table.horizontalAlignment = block.style.flowAlign.toElementAlignment()
         table.keepTogether = block.style.keepTogether
         table.isSplitLate = false
+        // False moves a row too tall for what is left of the page onto the next one whole, instead of
+        // breaking it across the boundary. `isSplitLate` above then has nothing to decide: it only chooses
+        // *when* to split a row, and this says whether one may be split at all.
+        table.isSplitRows = block.style.allowRowSplit
         table.setWidths(widths)
 
         val hasHeader = visible.any { it.column.title != null }
@@ -293,12 +298,12 @@ public class OpenPdfRenderer(
     }
 
     private fun headerCell(column: Column, style: TableStyle): PdfPCell {
-        val cell = PdfPCell(Phrase(column.title.orEmpty(), theme.fontFor(null)))
+        val cell = PdfPCell(Phrase(column.title.orEmpty(), theme.fontFor(style.headerStyleFor(column))))
         cell.horizontalAlignment = column.headerAlignOrDefault.toElementAlignment()
         cell.verticalAlignment = Element.ALIGN_MIDDLE
         style.headerBackground?.let { cell.backgroundColor = it.toAwt() }
         applyBorders(cell, style.cellBorders)
-        applyPadding(cell, style.cellPadding)
+        applyPadding(cell, style.headerPaddingFor(column))
         return cell
     }
 
