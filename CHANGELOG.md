@@ -34,6 +34,26 @@ Two things a table could not previously say about itself.
 
   Ignored by the spreadsheet renderer, along with `headerPadding`: a sheet has no page boundary to split a
   row across until it is printed, and a spreadsheet cell has no padding to set. `headerStyle` does carry over.
+- **The composite helpers take a style.** `banner` already did; `panes`, `totals` and `section` baked theirs
+  in, so the combined layouts they build — a full-width band, columns side by side, a label-and-amount block
+  — could not be given different padding without abandoning the helper and hand-building its table.
+
+  - `panes(…, style = …, vAlign = …)`. The style is the table the panes sit in, and its `cellPadding` is
+    what separates one pane from the next, a pane being a cell. `vAlign` was fixed at `Top`.
+  - `totals(…, style = …)`, defaulting to the 4pt padding it always used. `widthFraction` and `align` still
+    win over the same two fields, since every caller states them.
+  - `section(…, headingStyle = …)`, for a heading that wants a colour or a weight rather than just a size.
+
+  Every default is what the helper produced before, and EasyProject's ten generators compile against the new
+  signatures unchanged.
+
+### Note on spanning
+
+There is still **no `colSpan`/`rowSpan`**, and a combined cell is still a nested full-width table inside a
+single cell — whose own `TableStyle` has always been settable. What changed is the helpers above, which had
+that style hardcoded. Real spanning remains a separate question: the PDF renderer would take it through
+`PdfPCell`, but the spreadsheet renderer already merges regions to place a nested table, so the two would
+need reconciling rather than a flag adding.
 
 ## [0.2.1] — 2026-08-31
 
