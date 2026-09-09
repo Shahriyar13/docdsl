@@ -161,6 +161,15 @@ public open class BlockScope internal constructor() {
          * and they read better as named arguments than buried in a style. Everything else comes from this.
          */
         style: TableStyle = TableStyle(cellPadding = Padding.all(4f)),
+        /**
+         * The text size for every line, unless a line states its own.
+         *
+         * Null is the renderer's default, which is what a totals block was fixed at — there was no way to
+         * set the size of the figures without writing the table out by hand. It sits here rather than only
+         * on [TotalsScope.line] because a block wanting a size wants it throughout; the per-line one is the
+         * exception.
+         */
+        size: Float? = null,
         build: TotalsScope.() -> Unit,
     ) {
         val scope = TotalsScope()
@@ -175,10 +184,14 @@ public open class BlockScope internal constructor() {
         ) {
             column(width = ColumnWidth.Flexible, align = Align.Start)
             column(width = ColumnWidth.Auto, align = Align.End)
-            lines.forEach { (label, amount, emphasised) ->
+            lines.forEach { line ->
+                // The line's own size wins, then the block's. Put on the run rather than resolved by the
+                // renderer, so `TableLayout` measures the figure at the size it will be drawn at — a totals
+                // column sized for 10pt and drawn at 12 is how `84.024,59 EUR` came to break across lines.
+                val lineSize = line.size ?: size
                 row {
-                    cell(label, bold = emphasised, align = Align.Start)
-                    cell(amount, bold = emphasised, align = Align.End)
+                    cell(line.label, bold = line.emphasised, size = lineSize, align = Align.Start)
+                    cell(line.amount, bold = line.emphasised, size = lineSize, align = Align.End)
                 }
             }
         }
@@ -505,7 +518,12 @@ public class RowScope internal constructor() {
 @DocDsl
 public class TotalsScope internal constructor() {
 
-    internal data class Line(val label: String, val amount: String, val emphasised: Boolean)
+    internal data class Line(
+        val label: String,
+        val amount: String,
+        val emphasised: Boolean,
+        val size: Float?,
+    )
 
     private val collected: MutableList<Line> = mutableListOf()
 
@@ -518,9 +536,20 @@ public class TotalsScope internal constructor() {
      * having been through a formatter — and a formatter given nothing returns `""`, not null. Treating only
      * null as absent would put a row with a blank amount on the document.
      */
-    public fun line(label: String, amount: String?, emphasised: Boolean = false) {
+    public fun line(
+        label: String,
+        amount: String?,
+        emphasised: Boolean = false,
+        /**
+         * This line's text size, overriding the size given to the whole block.
+         *
+         * Null takes the block's, which is the usual case — a totals block wants one size throughout. This
+         * is for the line that departs from it, typically the grand total set larger than the figures above.
+         */
+        size: Float? = null,
+    ) {
         if (amount.isNullOrEmpty()) return
-        collected += Line(label, amount, emphasised)
+        collected += Line(label, amount, emphasised, size)
     }
 }
 

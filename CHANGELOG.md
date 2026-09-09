@@ -6,6 +6,26 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`totals(size = …)` and `line(size = …)`.** A totals block's figures were fixed at the renderer's default
+  text size, because `totals` renders each line as `cell(label, bold = emphasised)` and stated no size — so
+  the only way to set one was to abandon the helper and write the table out by hand. The block-level `size`
+  applies to every line and the per-line one overrides it, which is the grand total set larger than the
+  figures above it.
+
+  Put on the run rather than resolved by a renderer, so `TableLayout` measures each figure at the size it
+  will be drawn at. A totals column measured at 10pt and drawn at 12 is how `84.024,59 EUR` came to break
+  across two lines in 0.2.1.
+
+### Known gap
+
+`TextStyle`'s own documentation says a null field means "whatever applies here — the enclosing block, column
+or table", and for a **body cell that is not true**: `chunkOf` goes straight from the run to the theme, so a
+table cannot supply a size the way `headerStyle` now supplies one for headings. Every body cell that wants a
+size still has to say so itself. The fix is a `TableStyle.cellStyle` merged field-wise with each run — the
+counterpart of `headerStyle` — and it is not in this release.
+
 ## [0.3.0] — 2026-09-09
 
 Two things a table could not previously say about itself.
