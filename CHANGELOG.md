@@ -46,10 +46,30 @@ points, both sides, every row — the `Padding(0, 3, 3, 3)` the table had asked 
   `TableStyle.cellPadding` is moved, because that is a default for text and was never a statement about the
   grid.
 
+- **A nested grid now fills its cell's height too**, which is the same sentence on the other axis. A cell
+  whose whole content is one grid is built as a **table cell** rather than as a composite of elements: a
+  composite lays the nested table out at its natural height and then positions it, so a one-line grid
+  beside a two-line one was a box floating inside the row with white space above and below, and a grid
+  whose cells were all empty collapsed to its padding — 3pt against a neighbour's 12pt. On the reported
+  header the "Main Supplier" half drew at y 571.40–559.20 inside a row spanning 576.00–554.60; it now
+  draws 576.00–554.60 like the half beside it, and the two collapsed value halves are gone.
+
+  **A vertical alignment opts out of it.** Measured on OpenPDF 3.0.0: a one-line grid beside a two-line one
+  fills its 16pt row as a table cell and shrinks back to a floating 8pt box the moment `verticalAlignment`
+  is set to anything but the default. That is coherent rather than a workaround — there is nothing to align
+  something that fills its container — so an explicit `Cell.vAlign` says "position it, do not fill",
+  exactly as an explicit `Cell.padding` says "inset it, do not span". `TableStyle.cellVAlign` is not an
+  explicit statement about a cell and no longer suppresses the fill.
+
 - **A nested block is measured against the width it is given.** `bodyCell` handed its children the full
   column width while placing them in the column *less* the padding, so `TableLayout` sized an `Auto` column
   inside a padded cell against a few points it never got — the same class of error as the squeezed price
   column in 0.2.1. Only cells containing a table or a group are affected; nothing else reads that width.
+
+- **`Padding` now resolves field by field**, which is what its own documentation has always claimed: a cell
+  stating only a `top` takes the other three from the table. `applyPadding` skips nulls, so an unstated
+  side previously kept whatever the `PdfPCell` constructor defaulted to — and the two constructors above do
+  not default to the same thing, so the old behaviour was not even stable.
 
 ### Note on spanning
 

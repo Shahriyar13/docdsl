@@ -282,6 +282,14 @@ public data class Row(public val cells: List<Cell>)
 public data class Cell(
     public val content: List<Block> = emptyList(),
     public val align: Align? = null,
+    /**
+     * Where this cell's content sits vertically, overriding the table's.
+     *
+     * **Stated here on a cell holding a nested grid, it stops that grid filling the row** and positions it
+     * at its natural height instead — the counterpart of what an explicit [padding] does to spanning.
+     * Left null, a grid fills, which is what makes a one-line sub-grid line up with the two-line one
+     * beside it.
+     */
     public val vAlign: VAlign? = null,
     public val borders: Borders? = null,
     /**
@@ -336,7 +344,7 @@ public data class Borders(
 public enum class Side { Top, Bottom, Start, End }
 
 /**
- * Space inside a cell, in points. Null fields fall back to the table's own padding.
+ * Space inside a cell, in points. An unstated side falls back to the table's own padding, field by field.
  *
  * **Padding is space around a cell's _content_, and a nested grid is not content.** A table inside a cell
  * stands in for column spanning, so its borders are meant to continue the parent's — and padding on the
@@ -406,6 +414,12 @@ public data class TableStyle(
      * drawn with.
      */
     public val cellPadding: Padding = Padding(top = 2f, bottom = 2f, start = 2f, end = 2f),
+    /**
+     * Where a cell's content sits vertically when it is shorter than its row.
+     *
+     * **A cell holding a nested grid ignores this**, because such a grid fills the row rather than sitting
+     * in it — see [Cell.vAlign], which is the way to say otherwise for one cell.
+     */
     public val cellVAlign: VAlign = VAlign.Middle,
 ) {
     /**
