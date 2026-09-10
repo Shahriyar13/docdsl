@@ -6,6 +6,81 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Known gap
+
+`TextStyle`'s own documentation says a null field means "whatever applies here — the enclosing block, column
+or table", and for a **body cell that is not true**: `chunkOf` goes straight from the run to the theme, so a
+table cannot supply a size the way `headerStyle` now supplies one for headings. Every body cell that wants a
+size still has to say so itself. The fix is a `TableStyle.cellStyle` merged field-wise with each run — the
+counterpart of `headerStyle` — and it is not in this release.
+
+## [0.4.0] — 2026-09-10
+
+The release that makes the nesting idiom actually work. `Block.Table` has said since 0.1.0 that where a span
+would be reached for, these documents "nest a full-width table inside a single cell" — and a nested table was
+never full-width. It was inset by the parent cell's padding, so the sub-grid was drawn a few points inside
+the very box it was supposed to complete, and no amount of border styling could make the two meet.
+
+Found by measuring a real document. On one proforma invoice the header had **twenty distinct vertical border
+positions where the form has six**, and fifty-four horizontal segments that started inside the frame and
+stopped short of it: the outer frame at x=40.25 and every sub-grid's left edge at x=43.25, the 45/55 splitter
+at x=272.00 and the sub-grids at x=275.00, the right frame at x=554.75 and the sub-grids at x=551.75. Three
+points, both sides, every row — the `Padding(0, 3, 3, 3)` the table had asked for.
+
+### Fixed
+
+- **A nested grid now spans its cell.** Padding is space around a cell's *content*, and a grid is not
+  content — it stands in for column spanning, so its borders are meant to continue the parent's. The
+  horizontal padding therefore comes off a cell that holds one, and the vertical padding comes off the end
+  the grid actually reaches. A cell holding a heading **above** a table keeps the space above the heading and
+  loses the space below the table, which is where the doubled border was.
+
+  The padding that kept text off the border is not lost: it is re-applied to the paragraphs, lists and images
+  sharing the cell, as `indentationLeft`/`indentationRight` and, for the first and last block, as
+  `spacingBefore`/`spacingAfter`. Measured on the item-list case, the group heading starts at **x=82.90 both
+  before and after** while the sub-table's edges move from 83.15/552.75 onto the column's own 81.15/554.75.
+
+  **An explicit `Cell.padding` is still honoured as written.** That is the escape hatch, and it is deliberate
+  rather than incidental: a `cellOf(padding = Padding(5f, …)) { … }` around a nested table is a statement
+  about that cell, and a document that wants a sub-table inset says so there. Only padding inherited from
+  `TableStyle.cellPadding` is moved, because that is a default for text and was never a statement about the
+  grid.
+
+- **A nested grid now fills its cell's height too**, which is the same sentence on the other axis. A cell
+  whose whole content is one grid is built as a **table cell** rather than as a composite of elements: a
+  composite lays the nested table out at its natural height and then positions it, so a one-line grid
+  beside a two-line one was a box floating inside the row with white space above and below, and a grid
+  whose cells were all empty collapsed to its padding — 3pt against a neighbour's 12pt. On the reported
+  header the "Main Supplier" half drew at y 571.40–559.20 inside a row spanning 576.00–554.60; it now
+  draws 576.00–554.60 like the half beside it, and the two collapsed value halves are gone.
+
+  **A vertical alignment opts out of it.** Measured on OpenPDF 3.0.0: a one-line grid beside a two-line one
+  fills its 16pt row as a table cell and shrinks back to a floating 8pt box the moment `verticalAlignment`
+  is set to anything but the default. That is coherent rather than a workaround — there is nothing to align
+  something that fills its container — so an explicit `Cell.vAlign` says "position it, do not fill",
+  exactly as an explicit `Cell.padding` says "inset it, do not span". `TableStyle.cellVAlign` is not an
+  explicit statement about a cell and no longer suppresses the fill.
+
+- **A nested block is measured against the width it is given.** `bodyCell` handed its children the full
+  column width while placing them in the column *less* the padding, so `TableLayout` sized an `Auto` column
+  inside a padded cell against a few points it never got — the same class of error as the squeezed price
+  column in 0.2.1. Only cells containing a table or a group are affected; nothing else reads that width.
+
+- **`Padding` now resolves field by field**, which is what its own documentation has always claimed: a cell
+  stating only a `top` takes the other three from the table. `applyPadding` skips nulls, so an unstated
+  side previously kept whatever the `PdfPCell` constructor defaulted to — and the two constructors above do
+  not default to the same thing, so the old behaviour was not even stable.
+
+### Note on spanning
+
+Still **no `colSpan`/`rowSpan`**. What changed is that the documented substitute now behaves as documented.
+Real spanning remains a separate question, and the reconciliation named in 0.3.0 still applies: the PDF
+renderer would take it through `PdfPCell`, while the spreadsheet renderer already merges regions to place a
+nested table.
+
+`docdsl-poi` is untouched. A sheet cell has no padding to move — see 0.2.0's note — so the idiom was never
+broken there.
+
 ### Added
 
 - **`totals(size = …)` and `line(size = …)`.** A totals block's figures were fixed at the renderer's default
@@ -16,15 +91,7 @@ All notable changes to this project are documented here. The format follows
 
   Put on the run rather than resolved by a renderer, so `TableLayout` measures each figure at the size it
   will be drawn at. A totals column measured at 10pt and drawn at 12 is how `84.024,59 EUR` came to break
-  across two lines in 0.2.1.
-
-### Known gap
-
-`TextStyle`'s own documentation says a null field means "whatever applies here — the enclosing block, column
-or table", and for a **body cell that is not true**: `chunkOf` goes straight from the run to the theme, so a
-table cannot supply a size the way `headerStyle` now supplies one for headings. Every body cell that wants a
-size still has to say so itself. The fix is a `TableStyle.cellStyle` merged field-wise with each run — the
-counterpart of `headerStyle` — and it is not in this release.
+  across two lines in 0.2.1. Written for 0.3.1 and never released; it ships here.
 
 ## [0.3.0] — 2026-09-09
 
@@ -173,7 +240,8 @@ remove public declarations. Pin an exact version.
   PDF families, or an embedded TrueType/OpenType font via `PdfFontFamily.embedded`, which is what any script
   outside Latin-1 requires.
 
-[Unreleased]: https://github.com/Shahriyar13/docdsl/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/Shahriyar13/docdsl/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/Shahriyar13/docdsl/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Shahriyar13/docdsl/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/Shahriyar13/docdsl/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Shahriyar13/docdsl/compare/v0.1.0...v0.2.0

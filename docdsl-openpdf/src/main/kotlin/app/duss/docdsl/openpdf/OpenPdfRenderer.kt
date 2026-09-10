@@ -313,18 +313,67 @@ public class OpenPdfRenderer(
         style: TableStyle,
         columnWidth: Float,
     ): PdfPCell {
-        val target = PdfPCell()
+        // Resolved field by field, which is what [Padding] has always said it does: a cell stating only a
+        // top falls back to the table for the other three. `applyPadding` skips nulls, so before this an
+        // unstated side silently kept whatever the PdfPCell constructor happened to default to — and the
+        // two constructors below do not default to the same thing.
+        val padding = cell.padding?.orElse(style.cellPadding) ?: style.cellPadding
+
+        // Padding is space around a cell's *content*. A nested grid is not content — it stands in for column
+        // spanning, so its borders are meant to continue the parent's — and padding on the cell draws it
+        // inset from the very box it completes. See `Block.Table`'s note on spanning, and `moveOffGrids`.
+        //
+        // Only when the padding came from the table. An explicit `Cell.padding` is a statement about *this*
+        // cell and is honoured as written, which is how a nested table can still be deliberately inset.
+        val holdsGrid = cell.padding == null && cell.content.any { it.isGrid() }
+        val effective = if (holdsGrid) padding.moveOffGrids(cell.content) else padding
+
+        // The width the content is actually laid out in, which is the column less whatever padding stayed
+        // on the cell. It used to be handed the full column width and placed in a narrower box, so an `Auto`
+        // column inside a padded cell was measured against a few points it never got.
+        val contentWidth = columnWidth - (effective.start ?: 0f) - (effective.end ?: 0f)
+        val elements = cell.content.mapIndexed { index, block ->
+            elementOf(block, contentWidth).also { element ->
+                if (holdsGrid && !block.isGrid()) {
+                    element.insetBy(
+                        padding = padding,
+                        atTop = index == 0,
+                        atBottom = index == cell.content.lastIndex,
+                    )
+                }
+            }
+        }
+
+        // A cell whose whole content is one grid is built as a **table cell** rather than as a composite of
+        // elements, and that is the vertical half of "a nested grid spans its cell".
+        //
+        // A composite lays the nested table out at its natural height and then positions it, so a one-line
+        // grid beside a two-line one is a box floating inside the row with white space above and below,
+        // and a grid whose cells are all empty collapses to its padding — 3pt against a neighbour's 12pt.
+        // Both were reported as "unsorted borders" on a proforma-invoice header, and both are this one
+        // thing. A table cell is stretched to the height the row settles on, so its borders are the row's.
+        //
+        // **Only when nothing asked for an alignment.** A vertical alignment is what suppresses the
+        // stretch: measured on OpenPDF 3.0.0, a one-line grid beside a two-line one fills its 16pt row as a
+        // table cell and shrinks back to a floating 8pt box the moment `verticalAlignment` is set to
+        // anything but the default. That is coherent rather than a workaround — there is nothing to align
+        // something that fills its container — so an explicit `Cell.vAlign` opts out of filling, exactly as
+        // an explicit `Cell.padding` opts out of spanning.
+        val grid = if (cell.content.singleOrNull()?.isGrid() == true) elements.first() as? PdfPTable else null
+        val fillsCell = grid != null && cell.vAlign == null
+        val target = if (fillsCell) PdfPCell(grid) else PdfPCell()
+
         target.horizontalAlignment = (cell.align ?: column.align).toElementAlignment()
-        target.verticalAlignment = (cell.vAlign ?: style.cellVAlign).toVerticalAlignment()
+        if (!fillsCell) target.verticalAlignment = (cell.vAlign ?: style.cellVAlign).toVerticalAlignment()
         cell.background?.let { target.backgroundColor = it.toAwt() }
         cell.minHeightPoints?.let { target.minimumHeight = it }
+        // After the constructor, always: `PdfPCell(PdfPTable)` sets a border and padding of its own, and
+        // these are the document's.
         applyBorders(target, cell.borders ?: style.cellBorders)
-        applyPadding(target, cell.padding ?: style.cellPadding)
+        applyPadding(target, effective)
 
-        if (cell.content.isEmpty()) {
-            target.addElement(Phrase(""))
-        } else {
-            cell.content.forEach { block -> target.addElement(elementOf(block, columnWidth)) }
+        if (!fillsCell) {
+            if (elements.isEmpty()) target.addElement(Phrase("")) else elements.forEach(target::addElement)
         }
         return target
     }
@@ -354,6 +403,80 @@ public class OpenPdfRenderer(
     private companion object {
         /** Clear space between a list's marker and its text, so "10." never touches the first word. */
         const val SYMBOL_GAP_POINTS = 4f
+    }
+}
+
+/**
+ * Whether this block is drawn as a grid whose borders should meet the cell's.
+ *
+ * A [Block.Group] counts when it holds one, because a group inside a cell becomes a borderless layout table
+ * around its children — so the grid is still there, one level down, and still wants the full width.
+ */
+internal fun Block.isGrid(): Boolean = when (this) {
+    is Block.Table -> true
+    is Block.Group -> blocks.any { it.isGrid() }
+    else -> false
+}
+
+/**
+ * This padding with the sides a grid touches taken off it.
+ *
+ * The horizontal padding always goes: a nested grid's left and right borders are the parent cell's, and any
+ * side padding is the two grids failing to meet by exactly that many points. The vertical padding goes only
+ * at the end the grid actually reaches — so a cell holding a heading above a table keeps the space above the
+ * heading and loses the space below the table, which is where the doubled border was.
+ *
+ * Only called once the caller has established that [content] holds a grid at all; it re-checks which *end*
+ * one sits at, which is a different question.
+ */
+/** This padding with each unstated side taken from [fallback] — what [Padding]'s own doc promises. */
+internal fun Padding.orElse(fallback: Padding): Padding = Padding(
+    top = top ?: fallback.top,
+    bottom = bottom ?: fallback.bottom,
+    start = start ?: fallback.start,
+    end = end ?: fallback.end,
+)
+
+internal fun Padding.moveOffGrids(content: List<Block>): Padding {
+    if (content.isEmpty()) return this
+    return Padding(
+        top = if (content.first().isGrid()) 0f else top,
+        bottom = if (content.last().isGrid()) 0f else bottom,
+        start = 0f,
+        end = 0f,
+    )
+}
+
+/**
+ * Gives a text element the horizontal padding that came off the cell, as indentation.
+ *
+ * Applied to the paragraphs, lists and images sharing a cell with a grid, so they keep their distance from
+ * the border while the grid beside them spans it. [atTop]/[atBottom] carry the vertical padding for the
+ * first and last block, which are the only ones it ever applied to.
+ *
+ * Silent on a [PdfPTable]: that is the grid, and it is the whole point that it is not inset.
+ */
+internal fun Element.insetBy(padding: Padding, atTop: Boolean, atBottom: Boolean) {
+    val start = padding.start ?: 0f
+    val end = padding.end ?: 0f
+    when (this) {
+        is Paragraph -> {
+            indentationLeft = start
+            indentationRight = end
+            if (atTop) spacingBefore = padding.top ?: 0f
+            if (atBottom) spacingAfter = padding.bottom ?: 0f
+        }
+        // Added to whatever the marker gutter already claimed, rather than replacing it — see `bulletsOf`.
+        is org.openpdf.text.List -> {
+            indentationLeft += start
+            indentationRight += end
+        }
+        is Image -> {
+            indentationLeft = start
+            indentationRight = end
+            if (atTop) spacingBefore = padding.top ?: 0f
+            if (atBottom) spacingAfter = padding.bottom ?: 0f
+        }
     }
 }
 
