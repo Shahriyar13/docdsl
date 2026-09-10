@@ -48,6 +48,10 @@ public sealed interface Block {
      * **There is no column or row spanning**, because none of the documents this was built for use one. Where a
      * span would be reached for they nest a full-width table inside a single cell, and since [Cell.content]
      * holds blocks, nesting needs nothing extra.
+     *
+     * "Full-width" is load-bearing and was not true until 0.4.0: the cell's padding used to inset the nested
+     * table, so the sub-grid was drawn a few points inside the box it was meant to complete and its borders
+     * could never meet the parent's. A grid in a cell now spans it — see [Padding].
      */
     public data class Table(
         public val columns: List<Column>,
@@ -280,6 +284,15 @@ public data class Cell(
     public val align: Align? = null,
     public val vAlign: VAlign? = null,
     public val borders: Borders? = null,
+    /**
+     * Space inside this one cell, overriding the table's.
+     *
+     * **Stated here, it is honoured exactly** — including around a nested grid, which inherited padding is
+     * deliberately not (see [Padding]). That is the escape hatch for a sub-table meant to sit *inside* its
+     * cell rather than complete it: a payment-details block floating in a pane says
+     * `padding = Padding.all(5f)` and gets its 5pt. Left null, a grid spans the cell and text keeps its
+     * distance from the border.
+     */
     public val padding: Padding? = null,
     public val background: DocColor? = null,
     /** Forces a minimum height — how a signature box reserves space to be written in by hand. */
@@ -322,7 +335,15 @@ public data class Borders(
 
 public enum class Side { Top, Bottom, Start, End }
 
-/** Space inside a cell, in points. Null fields fall back to the table's own padding. */
+/**
+ * Space inside a cell, in points. Null fields fall back to the table's own padding.
+ *
+ * **Padding is space around a cell's _content_, and a nested grid is not content.** A table inside a cell
+ * stands in for column spanning, so its borders are meant to continue the parent's — and padding on the
+ * cell would draw it inset from the very box it completes. A renderer therefore takes the horizontal
+ * padding off a cell that holds a grid, and the vertical padding off whichever end the grid reaches,
+ * re-applying it to any text sharing the cell as indentation. See [Cell.padding] for the one exception.
+ */
 public data class Padding(
     public val top: Float? = null,
     public val bottom: Float? = null,
