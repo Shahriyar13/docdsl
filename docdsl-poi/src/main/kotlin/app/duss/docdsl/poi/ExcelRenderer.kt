@@ -13,15 +13,18 @@ import app.duss.docdsl.TextRun
 import app.duss.docdsl.TextStyle
 import app.duss.docdsl.TokenRun
 import org.apache.poi.ss.usermodel.BorderStyle
+import org.apache.poi.ss.usermodel.ClientAnchor
 import org.apache.poi.ss.usermodel.FillPatternType
 import org.apache.poi.ss.usermodel.PrintSetup
 import org.apache.poi.ss.usermodel.Sheet
 import org.apache.poi.ss.usermodel.Workbook
 import org.apache.poi.ss.util.CellRangeAddress
 import org.apache.poi.ss.util.RegionUtil
+import org.apache.poi.util.Units
 import org.apache.poi.xssf.usermodel.XSSFCellStyle
 import org.apache.poi.xssf.usermodel.XSSFColor
 import org.apache.poi.xssf.usermodel.XSSFFont
+import org.apache.poi.xssf.usermodel.XSSFPicture
 import org.apache.poi.xssf.usermodel.XSSFRichTextString
 import org.apache.poi.xssf.usermodel.XSSFSheet
 import org.apache.poi.xssf.usermodel.XSSFWorkbook
@@ -135,8 +138,11 @@ public class ExcelRenderer(
             applyColumnWidths()
             grid.cells.forEach { write(it) }
             grid.frames.forEach { frame(it) }
-            grid.pictures.forEach { picture(it) }
+            // Heights before pictures, which is not the order it reads in: a picture's anchor is stated as
+            // a cell plus an offset into it, so placing one means walking out across the columns and rows
+            // it covers, and those have to be their final size before the walk can mean anything.
             applyRowHeights()
+            grid.pictures.forEach { picture(it) }
             grid.pageBreakRows.forEach { sheet.setRowBreak(startRow + it) }
             return startRow + grid.rowCount
         }
@@ -239,6 +245,19 @@ public class ExcelRenderer(
             }
         }
 
+        /**
+         * A picture, at the size the document asked for.
+         *
+         * The anchor says where it starts; the size has to be walked out from there, because a drawing is
+         * positioned as "this cell, plus this far into it" rather than in points. Whole columns are taken
+         * while they fit and the remainder becomes the offset into the one that does not; the same for rows.
+         *
+         * POI's own `resize()` is not a shortcut to this. It sizes the picture to the image's **natural**
+         * pixel size and ignores [Block.Picture.maxWidthPoints] entirely, so a 2888px logo asked to fit a
+         * 200pt box arrived 2166pt wide — 41 columns across and 26 rows down. Nor is `resize(scale)`: that
+         * scales the anchor's *current* extent rather than the image, so a ratio worked out from the natural
+         * size gives the right width against the wrong height.
+         */
         private fun picture(placed: PlacedPicture) {
             val bytes = when (val source = placed.source) {
                 is ImageSource.Bytes -> source.value
@@ -249,11 +268,68 @@ public class ExcelRenderer(
             val anchor = helper.createClientAnchor()
             anchor.setCol1(firstColumnOf(placed.left))
             anchor.row1 = startRow + placed.row
-            anchor.setCol2(firstColumnOf(placed.left) + 1)
-            anchor.row2 = startRow + placed.row + placed.rowSpan
+            anchor.setCol2(firstColumnOf(placed.left))
+            anchor.row2 = startRow + placed.row
             val drawing = sheet.createDrawingPatriarch()
-            // resize() honours the image's own proportions; the anchor decides where it starts.
-            drawing.createPicture(anchor, index).resize()
+            val picture = drawing.createPicture(anchor, index)
+
+            val natural = runCatching { picture.imageDimension }.getOrNull() ?: return
+            val naturalWidth = natural.width * POINTS_PER_PIXEL
+            val naturalHeight = natural.height * POINTS_PER_PIXEL
+            if (naturalWidth <= 0f || naturalHeight <= 0f) return
+
+            // One scale for both axes, so the image keeps its proportions, and never above 1: a bound is a
+            // ceiling, not a size, so an image already small enough is left as it is.
+            val scale = listOfNotNull(
+                placed.maxWidthPoints?.let { it / naturalWidth },
+                placed.maxHeightPoints?.let { it / naturalHeight },
+                1f,
+            ).min()
+            stretch(picture.clientAnchor, naturalWidth * scale, naturalHeight * scale)
+            picture.stateSize(naturalWidth * scale, naturalHeight * scale)
+        }
+
+        /**
+         * Writes the size into the shape as well as into its anchor.
+         *
+         * A two-cell anchor is what actually decides the size on screen, and the `ext` inside the shape is
+         * meant to agree with it. POI keeps the two in step when it does the resizing itself, so this does
+         * the same rather than leave a shape stating that it is nothing by nothing.
+         */
+        private fun XSSFPicture.stateSize(widthPoints: Float, heightPoints: Float) {
+            val extent = runCatching { ctPicture.spPr.xfrm.ext }.getOrNull() ?: return
+            extent.cx = Units.toEMU(widthPoints.toDouble()).toLong()
+            extent.cy = Units.toEMU(heightPoints.toDouble()).toLong()
+        }
+
+        /** Moves an anchor's far corner so the shape it holds comes out this many points wide and tall. */
+        private fun stretch(anchor: ClientAnchor, widthPoints: Float, heightPoints: Float) {
+            fun columnPoints(index: Int): Float = sheet.getColumnWidthInPixels(index) * POINTS_PER_PIXEL
+            fun rowPoints(index: Int): Float =
+                sheet.getRow(index)?.heightInPoints ?: sheet.defaultRowHeightInPoints
+
+            // Bounded: a column of zero width would otherwise walk to the end of the sheet.
+            var column = anchor.col1.toInt()
+            var across = widthPoints
+            var steps = 0
+            while (across > columnPoints(column) && steps++ < WALK_LIMIT) {
+                across -= columnPoints(column)
+                column++
+            }
+            anchor.dx1 = 0
+            anchor.setCol2(column)
+            anchor.dx2 = Units.toEMU(across.toDouble())
+
+            var row = anchor.row1
+            var down = heightPoints
+            steps = 0
+            while (down > rowPoints(row) && steps++ < WALK_LIMIT) {
+                down -= rowPoints(row)
+                row++
+            }
+            anchor.dy1 = 0
+            anchor.row2 = row
+            anchor.dy2 = Units.toEMU(down.toDouble())
         }
 
         /**
@@ -516,3 +592,9 @@ private data class StyleKey(
     val background: DocColor?,
     val wrap: Boolean,
 )
+
+/** An image's natural size is in pixels at 96dpi; a document states its boxes in points. */
+private const val POINTS_PER_PIXEL = 72f / 96f
+
+/** How far a picture may be walked across the grid before the walk is treated as a bug. */
+private const val WALK_LIMIT = 256
