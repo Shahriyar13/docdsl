@@ -3,14 +3,19 @@ package app.duss.docdsl.poi
 import app.duss.docdsl.Align
 import app.duss.docdsl.ColumnWidth
 import app.duss.docdsl.DocColor
+import app.duss.docdsl.ImageSource
 import app.duss.docdsl.Padding
 import app.duss.docdsl.TableStyle
 import app.duss.docdsl.TextStyle
 import app.duss.docdsl.document
 import org.apache.poi.ss.usermodel.WorkbookFactory
 import org.apache.poi.ss.util.CellRangeAddress
+import org.apache.poi.xssf.usermodel.XSSFPicture
 import org.apache.poi.xssf.usermodel.XSSFSheet
+import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import javax.imageio.ImageIO
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -259,5 +264,51 @@ class ExcelRendererTest {
         )
         assertEquals("Heading", sheet.textAt(0, 0))
         assertEquals("Body", sheet.textAt(1, 0))
+    }
+
+    /**
+     * A picture used to arrive at its natural pixel size however small a box it was given, which on a
+     * letterhead logo meant a badge two and a half feet wide over the whole document.
+     */
+    @Test
+    fun `a picture is drawn inside the bounds it was given`() {
+        val sheet = render(
+            document {
+                picture(ImageSource.Bytes(pngOf(width = 800, height = 200)), maxWidthPoints = 200f)
+            }
+        )
+
+        val picture = sheet.drawingPatriarch.shapes.filterIsInstance<XSSFPicture>().single()
+        val extent = picture.ctPicture.spPr.xfrm.ext
+
+        // 800px at 96dpi is 600pt, so a 200pt ceiling is a third of it — and the height has to follow, or
+        // the logo is drawn stretched.
+        assertEquals(200.0, extent.cx / EMU_PER_POINT, 1.0, "width should be the bound it was given")
+        assertEquals(50.0, extent.cy / EMU_PER_POINT, 1.0, "height should keep the image's proportions")
+    }
+
+    /** An image smaller than its bounds is left alone: a bound is a ceiling, not a size to grow into. */
+    @Test
+    fun `a picture smaller than its bounds is not blown up`() {
+        val sheet = render(
+            document {
+                picture(ImageSource.Bytes(pngOf(width = 64, height = 64)), maxWidthPoints = 200f)
+            }
+        )
+
+        val picture = sheet.drawingPatriarch.shapes.filterIsInstance<XSSFPicture>().single()
+        val extent = picture.ctPicture.spPr.xfrm.ext
+
+        assertEquals(48.0, extent.cx / EMU_PER_POINT, 1.0, "64px at 96dpi is 48pt, and should stay there")
+    }
+
+    /** A solid PNG of a known size, so a test can state what it expects the renderer to do with it. */
+    private fun pngOf(width: Int, height: Int): ByteArray =
+        ByteArrayOutputStream().also { out ->
+            ImageIO.write(BufferedImage(width, height, BufferedImage.TYPE_INT_RGB), "png", out)
+        }.toByteArray()
+
+    private companion object {
+        const val EMU_PER_POINT = 12_700.0
     }
 }
