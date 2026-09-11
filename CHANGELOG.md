@@ -14,6 +14,34 @@ table cannot supply a size the way `headerStyle` now supplies one for headings. 
 size still has to say so itself. The fix is a `TableStyle.cellStyle` merged field-wise with each run — the
 counterpart of `headerStyle` — and it is not in this release.
 
+## [0.4.1] — 2026-09-11
+
+A picture ignored the bounds it was given. Found the way the last one was, by measuring a real document: a
+letterhead logo asked to fit a 200x60pt box arrived **2166 points wide** — `cx="27508200"` in the drawing
+XML, 41 columns across and 26 rows down, the whole letterhead and most of the document under a company badge.
+
+### Fixed
+
+- **`picture(source, maxWidthPoints = …, maxHeightPoints = …)` is honoured in a workbook.** The bounds were
+  read into the layout and then thrown away at emission, because placing a picture ended in POI's `resize()`
+  — which means "resize to the image's *original* size". One scale is now derived for both axes, so the
+  image keeps its proportions, and it is never above 1: a bound is a ceiling, not a size to grow into.
+
+  `resize(scale)` is not the fix it looks like, and is worth recording so it is not reached for again: it
+  scales the **anchor's current extent**, not the image. A ratio worked out from the natural size therefore
+  lands the width correctly and the height anywhere at all, and the two disagree by however much the rows the
+  anchor happens to span differ from the rows it should have spanned.
+
+- **A picture is placed after the row heights are applied.** Its anchor is stated as a cell plus an offset
+  into it, so placing one means walking out across the columns and rows it covers — and until the rows are
+  their final height, that walk measures nothing. This is also why the old `resize()` was inconsistent rather
+  than merely wrong: it measured rows still sitting at the default height, so the same document produced a
+  different overshoot depending on how tall its letterhead was.
+
+- **The shape states its own size too.** A two-cell anchor is what decides the size on screen, but `ext`
+  inside the shape is meant to agree with it, and POI keeps the two in step when it does the resizing itself.
+  A shape claiming to be nothing by nothing is left for no reader to interpret.
+
 ## [0.4.0] — 2026-09-10
 
 The release that makes the nesting idiom actually work. `Block.Table` has said since 0.1.0 that where a span
@@ -240,7 +268,8 @@ remove public declarations. Pin an exact version.
   PDF families, or an embedded TrueType/OpenType font via `PdfFontFamily.embedded`, which is what any script
   outside Latin-1 requires.
 
-[Unreleased]: https://github.com/Shahriyar13/docdsl/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/Shahriyar13/docdsl/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/Shahriyar13/docdsl/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/Shahriyar13/docdsl/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Shahriyar13/docdsl/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/Shahriyar13/docdsl/compare/v0.2.0...v0.2.1
