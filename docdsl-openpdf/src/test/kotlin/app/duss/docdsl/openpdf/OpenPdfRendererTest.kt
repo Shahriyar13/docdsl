@@ -119,6 +119,32 @@ class OpenPdfRendererTest {
     }
 
     @Test
+    fun `the page count is drawn at its paragraph's size, not the theme's`() {
+        val bytes = renderer.renderToBytes(
+            document {
+                pageFooter {
+                    paragraph(size = 6f, align = Align.End) {
+                        text("Page ")
+                        currentPage()
+                        text(" of ")
+                        totalPages()
+                    }
+                }
+                repeat(120) { index -> paragraph("Line $index of a document that has to spill over a page.") }
+            }
+        )
+        // The count lives in a form XObject filled in when the document closes; read the size its text is set at.
+        val reader = org.openpdf.text.pdf.PdfReader(bytes)
+        val forms = (1 until reader.xrefSize).mapNotNull { reader.getPdfObject(it) as? org.openpdf.text.pdf.PRStream }
+            .filter { it.get(org.openpdf.text.pdf.PdfName.SUBTYPE) == org.openpdf.text.pdf.PdfName.FORM }
+            .map { String(org.openpdf.text.pdf.PdfReader.getStreamBytes(it), Charsets.ISO_8859_1) }
+        val sizes = forms.flatMap { Regex("""/\S+ ([\d.]+) Tf""").findAll(it).map { m -> m.groupValues[1].toFloat() }.toList() }
+        assertTrue(sizes.isNotEmpty(), "the page count was not drawn: $forms")
+        assertTrue(sizes.all { it == 6f }, "the page count was drawn at $sizes, not 6")
+        reader.close()
+    }
+
+    @Test
     fun `renders totals panes bullets and a page break`() {
         val bytes = renderer.renderToBytes(
             document {

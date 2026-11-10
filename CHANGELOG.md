@@ -14,6 +14,15 @@ table cannot supply a size the way `headerStyle` now supplies one for headings. 
 size still has to say so itself. The fix is a `TableStyle.cellStyle` merged field-wise with each run — the
 counterpart of `headerStyle` — and it is not in this release.
 
+## [0.4.2] — 2026-11-10
+
+### Fixed
+
+- **The page count is the size and colour of its paragraph.** `totalPages()` was drawn in the theme's default
+  font, so in a footer at 6pt "Page 1 of 2" ended in a larger, black "2". The count is filled in when the
+  document closes, after its paragraph is gone, so its font is now read from the token's own run, which carries
+  the paragraph's size and colour through the DSL. The template it is drawn into is sized to that font.
+
 ## [0.4.1] — 2026-09-11
 
 A picture ignored the bounds it was given. Found the way the last one was, by measuring a real document: a
@@ -268,7 +277,8 @@ remove public declarations. Pin an exact version.
   PDF families, or an embedded TrueType/OpenType font via `PdfFontFamily.embedded`, which is what any script
   outside Latin-1 requires.
 
-[Unreleased]: https://github.com/Shahriyar13/docdsl/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/Shahriyar13/docdsl/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/Shahriyar13/docdsl/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/Shahriyar13/docdsl/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/Shahriyar13/docdsl/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Shahriyar13/docdsl/compare/v0.2.1...v0.3.0
