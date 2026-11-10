@@ -36,10 +36,17 @@ internal class PageFrameEvent(
     /** Set while a footer is being drawn, so the resolver knows which page it is on. */
     private var pageBeingDrawn: Int = 0
 
+    /**
+     * The font the page count is drawn in: the one its own run asks for (the footer paragraph's size and colour
+     * reach the run through the DSL), so "Page 1 of 2" is one size throughout. Null when the frame has no count.
+     */
+    private val totalPagesFont: Font? by lazy {
+        (frame.header + frame.footer).firstNotNullOfOrNull { tokenRun(it, DocToken.TotalPages) }?.let { theme.fontFor(it.style) }
+    }
+
     override fun onOpenDocument(writer: PdfWriter, document: Document) {
-        if (!frameMentions(DocToken.TotalPages)) return
-        // Room for four digits at the theme's size; the number is drawn left-aligned inside it.
-        val font = theme.fontFor(null)
+        // Room for four digits at the count's own size; the number is drawn left-aligned inside it.
+        val font = totalPagesFont ?: return
         val width = font.widthOf("0000") + 2f
         totalPagesTemplate = writer.directContent.createTemplate(width, font.calculatedSize + 2f)
     }
@@ -57,10 +64,11 @@ internal class PageFrameEvent(
 
     override fun onCloseDocument(writer: PdfWriter, document: Document) {
         val template = totalPagesTemplate ?: return
-        val font = theme.fontFor(null)
+        val font = totalPagesFont ?: theme.fontFor(null)
         val base = runCatching { font.getCalculatedBaseFont(false) }.getOrNull() ?: return
         // By the time the document closes the writer has moved past the last page, so the count is one less.
         val total = (writer.pageNumber - 1).coerceAtLeast(1)
+        font.color?.let { template.setColorFill(it) }
         template.beginText()
         template.setFontAndSize(base, font.calculatedSize)
         template.setTextMatrix(0f, 1f)
@@ -114,16 +122,14 @@ internal class PageFrameEvent(
         else -> renderer.elementOf(block, theme.page.contentWidthPoints)
     }
 
-    private fun frameMentions(token: DocToken): Boolean =
-        (frame.header + frame.footer).any { block -> mentions(block, token) }
-
-    private fun mentions(block: Block, token: DocToken): Boolean = when (block) {
-        is Block.Paragraph -> block.runs.any { it is TokenRun && it.token == token }
-        is Block.Group -> block.blocks.any { mentions(it, token) }
-        is Block.Table -> block.rows.any { row ->
-            row.cells.any { cell -> cell.content.any { mentions(it, token) } }
+    /** The first run of [token] in [block], wherever it sits. */
+    private fun tokenRun(block: Block, token: DocToken): TokenRun? = when (block) {
+        is Block.Paragraph -> block.runs.firstOrNull { it is TokenRun && it.token == token } as TokenRun?
+        is Block.Group -> block.blocks.firstNotNullOfOrNull { tokenRun(it, token) }
+        is Block.Table -> block.rows.firstNotNullOfOrNull { row ->
+            row.cells.firstNotNullOfOrNull { cell -> cell.content.firstNotNullOfOrNull { tokenRun(it, token) } }
         }
-        else -> false
+        else -> null
     }
 
     /**
